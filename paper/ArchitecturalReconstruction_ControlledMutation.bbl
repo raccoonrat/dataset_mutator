@@ -102,6 +102,12 @@ SISF Authors.
 \newblock {\em arXiv}, 2025.
 \newblock \url{https://arxiv.org/html/2511.07645v1}.
 
+\bibitem{strongreject}
+StrongREJECT Authors.
+\newblock Strongreject: Negation-based safety alignment for large language
+  models, 2024.
+\newblock \url{https://arxiv.org/abs/2311.09617}.
+
 \bibitem{jade-db}
 {CRAD}.
 \newblock {JADE-DB}: A universal testing benchmark for large language model
@@ -120,6 +126,12 @@ SISF Authors.
 \newblock Llm-based data reconstruction attacks, 2026.
 \newblock
   \url{https://www.emergentmind.com/topics/llm-based-data-reconstruction-attacks}.
+
+\bibitem{llama-guard}
+{Meta AI}.
+\newblock Llama guard: {LLM}-based input-output safeguard model, 2024.
+\newblock
+  \url{https://github.com/meta-llama/PurpleLlama/tree/main/Llama-Guard}.
 
 \bibitem{dual-use-attestations}
 OpenReview.
