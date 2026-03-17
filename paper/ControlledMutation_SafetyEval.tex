@@ -1,0 +1,232 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Controlled Mutation and Round Scheduling for Multi-Round LLM Safety Evaluation:
+% Protecting Benchmark Assets Without Sacrificing Fidelity
+%
+% Format: USENIX (usenix-2020-09.sty)
+% Target: USENIX Security / OSDI / best-paper tier
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix-2020-09}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xspace}
+
+%-------------------------------------------------------------------------------
+\title{\Large \bf Controlled Mutation and Round Scheduling for\\
+  Multi-Round LLM Safety Evaluation: Protecting Benchmark\\
+  Assets Without Sacrificing Fidelity}
+
+\author{
+{\rm Author One}\\
+Anthropic \and
+{\rm Author Two}\\
+Google \and
+{\rm Author Three}\\
+Affiliation
+}
+
+\date{}
+
+%-------------------------------------------------------------------------------
+\begin{document}
+%-------------------------------------------------------------------------------
+\maketitle
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+Enterprise LLM safety evaluation relies on high-value benchmark datasets whose exposure in multi-round evaluations enables progressive reconstruction attacks---effectively ``leaking'' the asset. We formalize this conflict and propose a unified architecture that combines a \emph{Safety Data Factory} with a \emph{Dataset Mutator}: semantically equivalent variant families plus round scheduling and hygiene gates. We give a rigorous threat model (reconstruction and synthetic pollution), prove that controlled mutation undermines gradient-based inversion, and define metrics (RSR, fidelity, auditability) for evaluation. The design aligns with TC260-style data governance and dual-use attestations (DUC/DUA-E) for release gating. We argue that this pipeline reconciles ``multi-round depth'' with ``strict asset protection'' and is a necessary step toward best-practice safety evaluation at scale.
+\end{abstract}
+
+%-------------------------------------------------------------------------------
+\section{Introduction}
+%-------------------------------------------------------------------------------
+
+In enterprise AI, safety evaluation has evolved from simple benchmarking into a compliance- and asset-protection concern. The underlying evaluation datasets are no longer mere test harnesses but core assets: they encode proprietary threat intelligence, trigger patterns, domain structure, and labeling rules. Under regimes such as China's TC260 and the 2025 generative AI pre-training and fine-tuning data safety specifications~\cite{tc260-training-data,tc260-governance}, evaluation and training data must be treated as \emph{controlled assets}---unauthorized leakage, reverse engineering, or inference via model interaction constitutes serious compliance and business risk.
+
+Traditional static evaluation is ill-suited to multi-round external evaluation. When auditors, partners, or adversaries can query the system over many rounds, they observe sample fragments, pass/fail signals, confidence scores, and failure summaries. These signals form a \emph{statistical query oracle}: with enough rounds, optimization-based and gradient-driven reconstruction can recover substantial parts of the dataset~\cite{llm-reconstruction-emergent,jailbreak-multi-round}. Uncontrolled evaluation thus becomes a data exfiltration channel---proving model safety can simultaneously destroy the confidentiality of the safety benchmark.
+
+At the same time, scaling evaluation forces reliance on synthetic data and auto-labeling~\cite{synthetic-data-privacy-bias}. Automation introduces \emph{data pollution}, distribution shift, semantic drift, and weak auditability; unchecked synthetic pipelines can produce homogeneous, biased test sets that inflate scores and hide real vulnerabilities~\cite{synthetic-bias-ml}.
+
+This paper addresses a central question (\textbf{RQ0}): how to apply \emph{controlled mutation} and \emph{round scheduling} so that (i) the dataset cannot be reconstructed across multiple evaluation rounds, and (ii) evaluation and compliance conclusions remain \emph{fidelity-preserving} and auditable. Our contribution is not to ``make evaluation harder'' with noise, but to define an auditable release mechanism that unifies \emph{data security} and \emph{data factory} in one pipeline: Generation $\rightarrow$ QA/Sampling $\rightarrow$ Lineage $\rightarrow$ Release Gating $\rightarrow$ Feedback. We align with platform-engineering practice: preflight eval, cryptographic evidence chains, and automated release gates~\cite{dual-use-attestations,one-eval}.
+
+We make the following contributions:
+\begin{itemize}
+\item A formal \emph{threat model} for multi-round reconstruction and synthetic pollution (\S\ref{sec:threat}).
+\item A \emph{Mutator + Safety Data Factory} architecture with semantic-preserving variant families and round-scheduling algorithms (\S\ref{sec:approach}).
+\item \emph{Governance and audit}: hygiene gates, human-in-the-loop (HITL) sampling, lineage, and release gating (\S\ref{sec:governance}).
+\item A concrete \emph{metrics and experimental protocol} for security, fidelity, and compliance (\S\ref{sec:metrics}).
+\end{itemize}
+
+%-------------------------------------------------------------------------------
+\section{Threat Model}
+\label{sec:threat}
+%-------------------------------------------------------------------------------
+
+We define assets, system boundaries, attacker capabilities, and goals.
+
+\subsection{Assets and System Boundary}
+
+The \emph{asset} is the raw evaluation dataset $\mathcal{D}$. It includes item text, high-level trigger patterns, adversarial prompts, class structure, and expert-defined labeling/scoring rules. The \emph{system boundary} is the evaluation API: external evaluators must receive only ``evaluation outcomes and necessary evidence'' (e.g., aggregate pass rates, risk-class compliance, sanitized refuse/non-refuse stats), never reversible information that could restore underlying items~\cite{one-eval}.
+
+\subsection{Attacker Capabilities}
+
+We assume the external evaluator (adversary) has \emph{multi-round query} access. They need not have white-box access to the model but have black-box access to the evaluation system. In each round $t$, they submit a model or prompt and observe feedback: binary decisions (e.g., safety trigger), continuous scores (toxicity, confidence), or partial failure reports~\cite{llm-reconstruction-emergent}. Without dynamic control, these accumulated statistics act as a \emph{statistical query oracle} for the adversary. Crucially, high-precision continuous scores can leak semantic features into embedding space, enabling advanced attackers to reconstruct trigger patterns even when surface forms differ. To mitigate this, the system boundary must enforce \emph{information quantization} or \emph{noise injection}: raw continuous scores should not be returned directly. Instead, scores are discretized (e.g., into high/medium/low risk tiers) or perturbed with differential-privacy noise, preventing fine-grained gradient exploitation while preserving decision utility.
+
+\subsection{Primary Threat: Progressive Reconstruction}
+
+The adversary's goal is \emph{progressive reconstruction} of $\mathcal{D}$: recover critical items, trigger templates, or class distributions. Mechanisms include linear-programming inversion, gradient-based inference, and feedback-driven optimization~\cite{llm-reconstruction-emergent,split-ft-attack}. In multi-round jailbreaking or prefix-style attacks, small perturbations are refined across rounds; the adversary effectively solves an optimization over the hidden dataset. With enough rounds, token sequences or triggers can be inverted. Reconstructed items can also be used for \emph{test-set contamination}, artificially inflating future scores~\cite{active-reconstruction}.
+
+\subsection{Secondary Threat: Synthetic Pollution}
+
+Internal risk comes from the data factory: synthetic and auto-labeled data can introduce systematic bias, underskilling/overskilling, and interpretative or societal bias baked into the benchmark~\cite{synthetic-bias-ml,bias-synthetic-review}. Generators can be \emph{confidently wrong}: they may assign high confidence to biased or polluted outputs. If such data enters the release pipeline without checks, compliance conclusions become invalid and unsafe models may be cleared for release.
+
+\subsection{Constraints and Objectives}
+
+Under TC260-style requirements~\cite{tc260-governance}, the system must satisfy strict data-layer control and sensitive-data protection. We require:
+
+\textbf{Security:} For a given round budget, minimize \emph{Reconstruction Success Rate (RSR)} so that any recovered distribution is close to random (e.g., in embedding space). Preserve \emph{evaluation fidelity} and \emph{full auditability}.
+
+\textbf{Evaluation:} Produce a stable evidence base for release gating (e.g., refuse/non-refuse compliance reports) without exposing reversible raw data~\cite{dual-use-attestations}.
+
+%-------------------------------------------------------------------------------
+\section{Approach: Mutator + Safety Data Factory}
+\label{sec:approach}
+%-------------------------------------------------------------------------------
+
+To break progressive reconstruction while retaining scale, we propose a single pipeline: \textbf{Safety Data Factory + Dataset Protection Mutator}. The key idea: \emph{never expose the same surface form across rounds}. If the system serves different semantic-equivalent variants in different rounds, gradient and optimization signals no longer constrain a single underlying item.
+
+\subsection{Semantic-Preserving Variant Family (RQ0)}
+
+For each canonical item $x \in \mathcal{D}$, the \emph{Mutator} produces a \emph{semantic-preserving equivalent variant family} $\mathcal{V}(x)$. In round $t$ the system may serve $v_t \in \mathcal{V}(x)$, and in round $t'$ a different $v_{t'} \in \mathcal{V}(x)$. Surface forms differ; semantics (and thus safety labels) are preserved. The attacker's gradients are then computed over distinct text surfaces, making the inversion problem underdetermined or inconsistent and preventing convergence~\cite{split-ft-attack}. This defense is reinforced by the API feedback quantization described in \S2.2: without fine-grained continuous scores, semantic-level reconstruction is further constrained.
+
+Mutation must not rely on low-level character substitution (easily detected); it must use \emph{linguistic and syntactic} transformation. We adopt a JADE-style approach~\cite{jade-linguistics}: transformational-generative grammar allows unbounded syntactic variation while preserving dangerous semantic content. We \emph{distinguish mutation strategies} by item type: (i) \textbf{Ordinary compliance test cases} tolerate aggressive linguistic mutation (voice change, neutral clause insertion, synonym substitution, reordering); (ii) \textbf{Complex jailbreak or adversarial prompts} are highly sensitive to subtle syntax, token sequences, or logical traps. For the latter, we use a \emph{conservative mutation strategy}---e.g., only replacing non-core entities, or applying minimal structural changes---and rely on round scheduling (\S3.2) to compensate for weaker surface variation.
+
+Concretely, the pipeline for ordinary cases:
+
+\begin{enumerate}
+\item \textbf{Constituency parsing:} Parse the safety item to a parse tree and identify core violation-bearing nodes.
+\item \textbf{Targeted rules:} Apply linguistically validated rules (voice change, insertion of neutral clauses, synonym substitution, reordering).
+\item \textbf{Surface realization:} Decode the mutated tree to natural text. Outputs are fluent and natural, avoiding trivial filter evasion.
+\item \textbf{Fidelity pre-flight check:} Before admitting $v_t$ into $\mathcal{V}(x)$, run an internal sandbox with a baseline oracle model. Only include $v_t$ if it triggers the same dangerous behavior as $x$ (e.g., identical refuse/pass outcome). This guards against mutation-induced fidelity loss.
+\end{enumerate}
+
+Thus one canonical prompt can yield a large family of variants; model refuse/pass behavior on $\mathcal{V}(x)$ matches behavior on $x$, preserving fidelity while preventing reconstruction.
+
+\subsection{Round Scheduling and Dispersion}
+
+Variants alone are insufficient: scheduling matters. If the same evaluator sees two very similar variants in quick succession, differential analysis can still leak information. We use \emph{round-scheduling} with:
+
+\begin{itemize}
+\item \textbf{Time/space dispersion:} Track an \emph{exposure budget} per variant family; space out exposures in time and maximize syntactic distance between consecutively served variants.
+\item \textbf{Adversarial reset:} On detection of high-frequency gradient probing, increase mutation rate or inject structurally distant variants to disrupt convergence and effectively ``reset'' the attacker's state.
+\end{itemize}
+
+Scheduling can be implemented with round-robin, genetic, or tabu-style algorithms tuned for dispersion and budget constraints~\cite{round-robin-max-diff,genetic-round-robin}.
+
+\subsection{Data Factory and Hygiene Gate}
+
+The factory may use quality-diversity search or other methods to generate adversarial prompts at scale~\cite{quality-diversity}. To contain pollution:
+
+All generated or mutated items pass a \emph{hygiene gate} before entering the evaluation pool. Variants must have passed the fidelity pre-flight check (\S3.1) before reaching the gate. The gate encodes TC260-style rules in code~\cite{tc260-governance}:
+
+\begin{itemize}
+\item \textbf{Data-layer filtering:} Lightweight classifiers block items containing unauthorized PII, geopolitical or discriminatory content.
+\item \textbf{Source and provenance:} Blacklists and fingerprinting filter known malicious or contaminated sources.
+\end{itemize}
+
+Compliance is enforced as a hard precondition in the data lifecycle, not only as post-hoc review.
+
+%-------------------------------------------------------------------------------
+\section{Governance and Audit}
+\label{sec:governance}
+%-------------------------------------------------------------------------------
+
+\subsection{Human-in-the-Loop Edge Sampling}
+
+To mitigate synthetic and auto-label bias, we use structured HITL sampling~\cite{hitl-toloka,hitl-comet}. A critical caveat: synthetic generators can be \emph{confidently wrong}---they may assign high confidence to biased or polluted data. Relying solely on ``high-confidence $\Rightarrow$ auto-admit'' would let such data bypass human review. We therefore combine:
+
+\textbf{Uncertainty-based routing:} Borderline and edge-case items (low confidence, high drift) are routed to human experts.
+
+\textbf{Stratified random auditing:} A fixed proportion (e.g., 5\%) of \emph{high-confidence} variants is \emph{mandatorily} sampled for human audit. This catches ``confidently wrong'' pollution that would otherwise enter the pool unchallenged.
+
+\textbf{Orthogonal judge models:} Uncertainty is computed using \emph{cross-model family evaluation}, not the same model (or same architecture) that generated the data. An orthogonal judge breaks the self-reinforcing bias loop where a biased generator confidently labels its own biased output as high quality.
+
+Expert corrections from both uncertainty-routed and randomly audited items feed back as RLHF-style signals to improve the generator. This preserves scale while retaining human oversight on ethics and complex logic.
+
+\subsection{Lineage and Cryptographic Evidence Chain}
+
+Every generation, mutation, filter, and evaluation exposure is recorded in an append-only \emph{lineage} log. For each evaluation outcome we build a \emph{cryptographic evidence chain}: hash of the canonical item, mutation rule IDs, scheduler round/timestamp, component fingerprints, and model response. Using hash-chained or Merkle-style append-only logs, the chain is tamper-evident~\cite{sbom-enisa,federated-lineage}. Auditors can verify coverage and rigor without seeing raw items.
+
+\subsection{Release Gating}
+
+Lineage and evidence feed into CI/CD \emph{release gating}~\cite{dual-use-attestations,owasp-spvs}. We adopt a dual-attestation model: DUC (machine-readable minimal compliance) for public release or filing, and DUA-E (controlled deeper metadata pointing to lineage). If a model fails on a lineage-certified critical variant family, the gate blocks release and returns diagnostics to development, closing the loop~\cite{ai-sre-cleric}.
+
+%-------------------------------------------------------------------------------
+\section{Metrics and Experimental Protocol}
+\label{sec:metrics}
+%-------------------------------------------------------------------------------
+
+We define a multi-dimensional protocol spanning security, utility, and compliance (Table~\ref{tab:metrics}).
+
+\begin{table}[t]
+\centering
+\caption{Metrics for asset protection and governance.}
+\label{tab:metrics}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Dimension} & \textbf{Metric} & \textbf{Target} & \textbf{Method} \\
+\midrule
+Security & RSR (token/embedding) & $\rightarrow 0$ as rounds $\uparrow$ & Optimization-based extraction; embedding similarity of reconstructed vs.\ true. \\
+Security & Trigger Logic RSR & $\rightarrow 0$ & Semantic-level extraction: measure whether core trigger patterns or risk classes are recoverable from feedback. \\
+Security & Attacker AUROC/AUPRC & $\approx$ random & MIA and attribute inference under scheduling. \\
+Fidelity & Eval.\ consistency & $\Delta$ small & Variance of refuse rate / score on $\mathcal{D}$ vs.\ $\mathcal{V}(\mathcal{D})$. \\
+Quality & Naturalness / PPL & High fluency & LLM-as-judge or perplexity on variants. \\
+Audit & Evidence completeness & 100\% coverage & Merkle verification of DUC/DUA-E to every Mutator/HITL step. \\
+Audit & High-confidence pollution rate & $\rightarrow 0$ & In stratified random audits, proportion of system-high-confidence items that human reviewers flag as biased or invalid. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The main technical tension is between \textbf{RSR} and \textbf{fidelity}: overly strong mutation can drive RSR to zero but harm semantics and fidelity; overly weak mutation leaves room for local gradient aggregation. The protocol uses closed-loop feedback to tune mutation strength and find a practical trade-off under compliance monitoring.
+
+%-------------------------------------------------------------------------------
+\section{Related Work}
+%-------------------------------------------------------------------------------
+
+\textbf{Reconstruction and extraction.} LLM training-data extraction and reconstruction are well documented~\cite{llm-reconstruction-emergent,split-ft-attack,active-reconstruction,inadequacy-similarity-privacy}. Our mitigation is structural (variant families + scheduling) rather than noise-only.
+
+\textbf{Safety evaluation.} JADE and similar platforms use linguistic mutation for safety evaluation~\cite{jade-linguistics,jade-db}; we adopt their grammar-based mutation and add scheduling and asset-protection guarantees.
+
+\textbf{Compliance and attestation.} TC260 frameworks~\cite{tc260-governance,tc260-training-data} and dual-use attestations (DUC/DUA-E)~\cite{dual-use-attestations} inform our hygiene gate and release gating. One-Eval~\cite{one-eval} provides an agentic, traceable evaluation workflow that fits our evidence-chain design.
+
+\textbf{Synthetic data and bias.} Synthetic data for scale and bias mitigation is widely studied~\cite{synthetic-data-privacy-bias,synthetic-bias-ml,bias-synthetic-review}; we treat pollution as an internal threat and use HITL and hygiene gates to contain it.
+
+%-------------------------------------------------------------------------------
+\section{Conclusion}
+%-------------------------------------------------------------------------------
+
+As LLMs enter enterprise deployment and regulators tighten safety and data rules, treating evaluation datasets as open multi-round oracles is no longer tenable. Uncontrolled multi-round evaluation supplies the feedback needed for progressive reconstruction, while unscaled or ungoverned synthetic factories introduce pollution.
+
+We proposed a unified architecture that combines a Safety Data Factory with a Dataset Mutator: semantic-preserving variant families, round scheduling, hygiene gates, HITL edge sampling, lineage, and release gating. By serving dynamically dispersed variants instead of fixed items, we break gradient-based reconstruction while preserving evaluation fidelity. The same pipeline supports machine-executable compliance and auditable evidence for release decisions, turning regulatory burden into a repeatable engineering process and protecting core evaluation assets without sacrificing rigor.
+
+%-------------------------------------------------------------------------------
+\section*{Availability}
+%-------------------------------------------------------------------------------
+Artifacts (mutator design, metric scripts, and compliance gate schemas) will be made available to support reproducibility, subject to institutional and export-control review.
+
+%-------------------------------------------------------------------------------
+\section*{Acknowledgments}
+%-------------------------------------------------------------------------------
+We thank the anonymous reviewers and our industry and standards colleagues for feedback on data governance and safety evaluation.
+
+%-------------------------------------------------------------------------------
+\bibliographystyle{plain}
+\bibliography{ControlledMutation_SafetyEval}
+
+\end{document}

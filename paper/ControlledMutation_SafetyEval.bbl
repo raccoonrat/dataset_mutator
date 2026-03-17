@@ -1,0 +1,161 @@
+\begin{thebibliography}{10}
+
+\bibitem{hitl-toloka}
+Toloka {AI}.
+\newblock Human-in-the-loop {ML} ({HITL}): When, where, how much, and how.
+\newblock {\em Toloka {AI}}, 2025.
+\newblock \url{https://toloka.ai/blog/hitl-machine-learning/}.
+
+\bibitem{jailbreak-multi-round}
+Anonymous.
+\newblock Incremental exploits: Efficient jailbreaks on large language models
+  with multi-round conversational jailbreaking.
+\newblock In {\em OpenReview}, 2024.
+\newblock \url{https://openreview.net/forum?id=KyKTjRtyNG}.
+
+\bibitem{inadequacy-similarity-privacy}
+arXiv Authors.
+\newblock On the inadequacy of similarity-based privacy metrics: Reconstruction
+  attacks against ``truly anonymous synthetic data''.
+\newblock {\em arXiv}, 2023.
+\newblock \url{https://arxiv.org/html/2312.05114v1}.
+
+\bibitem{split-ft-attack}
+arXiv Authors.
+\newblock Unveiling the vulnerability of private fine-tuning in split-based
+  frameworks for large language models: A bidirectionally enhanced attack.
+\newblock {\em arXiv}, 2024.
+\newblock \url{https://arxiv.org/html/2409.00960v1}.
+
+\bibitem{active-reconstruction}
+arXiv Authors.
+\newblock Learning to detect language model training data via active
+  reconstruction.
+\newblock {\em arXiv}, 2026.
+\newblock \url{https://arxiv.org/html/2602.19020v1}.
+
+\bibitem{jade-linguistics}
+JADE Authors.
+\newblock {JADE}: A linguistics-based safety evaluation platform for large
+  language models.
+\newblock {\em arXiv}, 2023.
+\newblock \url{https://arxiv.org/html/2311.00286v3}.
+
+\bibitem{bias-synthetic-review}
+MDPI Authors.
+\newblock Bias mitigation via synthetic data generation: A review.
+\newblock {\em MDPI Electronics}, 13(19), 2024.
+\newblock \url{https://www.mdpi.com/2079-9292/13/19/3909}.
+
+\bibitem{one-eval}
+One-Eval Authors.
+\newblock One-eval: An agentic system for automated and traceable {LLM}
+  evaluation.
+\newblock {\em arXiv}, 2026.
+\newblock \url{https://arxiv.org/html/2603.09821v1}.
+
+\bibitem{genetic-round-robin}
+ResearchGate Authors.
+\newblock A new approach to {CPU} scheduling algorithm: Genetic round robin.
+\newblock {\em ResearchGate}, 2013.
+\newblock
+  \url{https://www.researchgate.net/publication/258651677_A_New_Approach_to_CPU_Scheduling_Algorithm_Genetic_Round_Robin}.
+
+\bibitem{round-robin-max-diff}
+Dipto Biswas et~al.
+\newblock An improved round robin scheduling algorithm based on maximum
+  difference of two adjacent processes.
+\newblock In {\em University of Barishal Journal}, 2021.
+\newblock
+  \url{https://bu.ac.bd/oldwebsite/uploads/BUJ1V5I12/17.Dipto%20Biswas.pdf}.
+
+\bibitem{ai-sre-cleric}
+Cleric.
+\newblock What is an {AI} {SRE}?, 2025.
+\newblock \url{https://cleric.ai/blog/what-is-an-ai-sre}.
+
+\bibitem{hitl-comet}
+Comet.
+\newblock Human-in-the-loop review workflows for {LLM} applications \& agents.
+\newblock {\em Comet}, 2025.
+\newblock \url{https://www.comet.com/site/blog/human-in-the-loop/}.
+
+\bibitem{jade-db}
+{CRAD}.
+\newblock {JADE-DB}: A universal testing benchmark for large language model
+  safety based on targeted mutation.
+\newblock {\em Journal of Computer Research and Development}, 2023.
+\newblock
+  \url{https://crad.ict.ac.cn/en/article/doi/10.7544/issn1000-1239.202330959}.
+
+\bibitem{synthetic-bias-ml}
+Dataversity.
+\newblock Synthetic data generation: Addressing data scarcity and bias in {ML}
+  models.
+\newblock {\em Dataversity}, 2025.
+\newblock
+  \url{https://www.dataversity.net/articles/synthetic-data-generation-addressing-data-scarcity-and-bias-in-ml-models/}.
+
+\bibitem{llm-reconstruction-emergent}
+{Emergent Mind}.
+\newblock Llm-based data reconstruction attacks, 2026.
+\newblock
+  \url{https://www.emergentmind.com/topics/llm-based-data-reconstruction-attacks}.
+
+\bibitem{sbom-enisa}
+{ENISA}.
+\newblock {SBOM} landscape analysis --- towards an implementation guide, 2025.
+\newblock
+  \url{https://www.enisa.europa.eu/sites/default/files/2025-12/SBOM%20Analysis%20-%20Towards%20an%20Implementation%20Guide_v1.20-Published.pdf}.
+
+\bibitem{synthetic-data-privacy-bias}
+iCrunchData.
+\newblock Synthetic data: Solving privacy, bias, and scale in machine learning.
+\newblock {\em icrunchdata}, 2025.
+\newblock
+  \url{https://icrunchdata.com/blog/synthetic-data-solving-privacy-bias-and-scale-in-machine-learning/}.
+
+\bibitem{owasp-spvs}
+Endor Labs.
+\newblock Announcing native support for {OWASP} secure pipeline verification
+  standard, 2025.
+\newblock
+  \url{https://www.endorlabs.com/learn/announcing-native-support-for-owasp-secure-pipeline-verification-standard}.
+
+\bibitem{dual-use-attestations}
+OpenReview.
+\newblock Dual-use attestations: A verifiable disclosure primitive for
+  militarization-risk governance, 2025.
+\newblock
+  \url{https://openreview.net/pdf/74925fa4e004b462c39677ae55349ff46297a3fc.pdf}.
+
+\bibitem{quality-diversity}
+ResearchGate.
+\newblock Semi-supervised contrastive {VAE} for disentanglement of digital
+  pathology images, 2024.
+\newblock
+  \url{https://www.researchgate.net/publication/384630538_Semi-Supervised_Contrastive_VAE_for_Disentanglement_of_Digital_Pathology_Images}.
+
+\bibitem{federated-lineage}
+Royal Society.
+\newblock Breaking interprovincial data silos: how federated learning can
+  unlock canada's public health potential.
+\newblock {\em Royal Society Open Science}, 2026.
+\newblock
+  \url{https://royalsocietypublishing.org/rsos/article/13/3/250959/480889/Breaking-interprovincial-data-silos-how-federated}.
+
+\bibitem{tc260-governance}
+{TC260}.
+\newblock China's {TC260} releases {AI} safety governance framework, 2024.
+\newblock
+  \url{https://www.onetrust.com/blog/chinas-tc260-releases-ai-safety-governance-framework/}.
+
+\bibitem{tc260-training-data}
+{TC260}.
+\newblock National standard: Cybersecurity technology---safety specifications
+  for generative artificial intelligence pre-training and fine-tuning data
+  (draft), 2025.
+\newblock
+  \url{https://cset.georgetown.edu/wp-content/uploads/t0616_training_data_safety_standard_draft_EN.pdf}.
+
+\end{thebibliography}
