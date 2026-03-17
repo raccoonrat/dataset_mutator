@@ -3,44 +3,44 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: ArchitecturalReconstruction_ControlledMutation.aux
 The style file: plain.bst
 Database file #1: ArchitecturalReconstruction_ControlledMutation.bib
-You've used 24 entries,
+You've used 25 entries,
             2118 wiz_defined-function locations,
-            597 strings with 8357 characters,
-and the built_in function-call counts, 5061 in all, are:
-= -- 493
-> -- 168
+            601 strings with 8484 characters,
+and the built_in function-call counts, 5307 in all, are:
+= -- 518
+> -- 181
 < -- 0
-+ -- 73
-- -- 48
-* -- 175
-:= -- 915
-add.period$ -- 84
-call.type$ -- 24
-change.case$ -- 96
++ -- 78
+- -- 52
+* -- 186
+:= -- 962
+add.period$ -- 88
+call.type$ -- 25
+change.case$ -- 100
 chr.to.int$ -- 0
-cite$ -- 24
-duplicate$ -- 207
-empty$ -- 470
-format.name$ -- 48
-if$ -- 1058
+cite$ -- 25
+duplicate$ -- 217
+empty$ -- 487
+format.name$ -- 52
+if$ -- 1108
 int.to.chr$ -- 0
-int.to.str$ -- 24
-missing$ -- 12
-newline$ -- 135
-num.names$ -- 48
-pop$ -- 138
+int.to.str$ -- 25
+missing$ -- 13
+newline$ -- 141
+num.names$ -- 50
+pop$ -- 141
 preamble$ -- 1
-purify$ -- 72
+purify$ -- 75
 quote$ -- 0
-skip$ -- 166
+skip$ -- 175
 stack$ -- 0
-substring$ -- 121
-swap$ -- 24
+substring$ -- 126
+swap$ -- 25
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 96
+type$ -- 100
 warning$ -- 0
-while$ -- 48
-width$ -- 26
-write$ -- 267
+while$ -- 50
+width$ -- 27
+write$ -- 279

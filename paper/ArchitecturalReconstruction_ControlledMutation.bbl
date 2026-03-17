@@ -160,4 +160,10 @@ OpenReview.
 \newblock
   \url{https://cset.georgetown.edu/wp-content/uploads/t0616_training_data_safety_standard_draft_EN.pdf}.
 
+\bibitem{rep-eng}
+Zou et~al.
+\newblock Representation engineering: A top-down approach to {AI} transparency.
+\newblock {\em arXiv}, 2023.
+\newblock \url{https://arxiv.org/abs/2310.01405}.
+
 \end{thebibliography}
