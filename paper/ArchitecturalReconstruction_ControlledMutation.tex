@@ -1,0 +1,163 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Architectural Reconstruction and Controlled Mutation:
+% A Unified Framework for Advanced Large Language Model Safety Defenses
+%
+% Format: USENIX (usenix-2020-09.sty)
+% Perspective: Cross-disciplinary Professor \& Anthropic/Google Chief Security Architect
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix-2020-09}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xspace}
+
+%-------------------------------------------------------------------------------
+\title{\Large \bf Architectural Reconstruction and Controlled\\
+  Mutation: A Unified Framework for Advanced Large\\
+  Language Model Safety Defenses}
+
+\author{
+{\rm Author One}\\
+Anthropic \and
+{\rm Author Two}\\
+Google
+\thanks{Written from the perspective of cross-disciplinary professorship and Anthropic/Google chief security architecture. Substitute author names as needed.}
+}
+
+\date{}
+
+%-------------------------------------------------------------------------------
+\begin{document}
+%-------------------------------------------------------------------------------
+\maketitle
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+The transition of Large Language Models (LLMs) from research tools to core components in critical systems has strained traditional safety paradigms. We present a unified framework that couples \emph{architectural reconstruction}---runtime adaptation of safety protocols via self-improving and semantic-firewall designs---with \emph{controlled mutation}---systematic, semantics-preserving perturbation for evaluation, diagnosis, and expert-behavior transfer. We formalize the interplay between these two pillars: reconstruction shifts safety from static pre-deployment checks to continuous, AI-driven adaptation, while controlled mutation supplies the evaluative substrate to probe and harden those architectures. We synthesize Self-Improving Safety Frameworks (SISF), Semantic Firewalls and intent vetting, epistemic grounding, reflective and slot-based mutation, silver-dataset pipelines (ADM-ES), and cognitive-taxonomy benchmarking into a single defensible architecture. We discuss threat models, metrics, and governance implications for enterprise and regulatory deployment, and argue that this unification is necessary for scalable, auditable LLM safety at machine speed.
+\end{abstract}
+
+%-------------------------------------------------------------------------------
+\section{Introduction}
+%-------------------------------------------------------------------------------
+
+Large Language Models have ceased to be peripheral research artifacts and now underpin mission-critical infrastructure: code generation, agents with system access, negotiations, and compliance-sensitive workflows. This shift exposes a fundamental mismatch: conventional software engineering and safety assurance assume deterministic, exhaustively specifiable components, whereas LLM-driven systems exhibit emergent, stochastic behavior that is not fully specified at design time~\cite{sisf-arxiv,agentos-arxiv}. Static defenses and periodic human red-teaming operate at human speed and cannot keep pace with automated adversarial generation; when a novel jailbreak or prompt injection succeeds, the architecture often remains unchanged and remains vulnerable to the same class of attack.
+
+Two conceptual pillars address this gap. \textbf{Architectural reconstruction} denotes the autonomous, runtime adaptation of a system's safety layer---moving safety from a one-time pre-deployment audit to a continuous, AI-driven process that synthesizes and deploys new policies in response to detected failures~\cite{sisf-arxiv}. \textbf{Controlled mutation} denotes the rigorous, semantics-preserving perturbation of prompts, demonstrations, and benchmarks to diagnose robustness, transfer expert behavior into agents, and expand evaluation coverage without test-set contamination~\cite{reflective-mutation,adm-es-arxiv}. Neither alone suffices: reconstruction without a principled mutation substrate risks overfitting to a narrow threat model; mutation without architectural adaptation leaves defenses static after each evaluation cycle.
+
+This paper unifies both under a single framework. We assume the dual role of cross-disciplinary academic and industry chief security architect (Anthropic \& Google) to bridge theory and deployment. Our contributions are:
+
+\begin{itemize}
+\item A \emph{unified conceptual model} linking architectural reconstruction and controlled mutation, with clear boundaries (assets, oracles, feedback loops) and threat models (\S\ref{sec:framework}).
+\item A \emph{reconstruction axis}: Self-Improving Safety Frameworks (SISF), Semantic Firewalls and intent vetting (AgentOS), and epistemic grounding for strategic and economic risk (\S\ref{sec:reconstruction}).
+\item A \emph{mutation axis}: reflective and slot-based mutation, silver-dataset pipelines (ADM-ES), cognitive-taxonomy benchmarking (e.g., Bloom), and metadata-layer reconstruction (MCP, ADR) (\S\ref{sec:mutation}).
+\item \emph{Integration, metrics, and governance}: how reconstruction and mutation feed each other, evaluation protocol, and implications for attestation and release gating (\S\ref{sec:integration}).
+\end{itemize}
+
+%-------------------------------------------------------------------------------
+\section{Unified Framework and Threat Model}
+\label{sec:framework}
+%-------------------------------------------------------------------------------
+
+\subsection{Assets and Oracles}
+
+The \emph{asset} is the effective ``safety surface'' of the system: policies, guardrails, trigger sets, and the data used to evaluate and tune them. The \emph{oracle} is the process that labels behavior (safe/unsafe, compliant/non-compliant). In multi-round settings, the evaluator (or adversary) interacts with the system and observes outcomes---binary decisions, scores, or failure reports---forming a statistical query interface. Uncontrolled exposure of the same items across rounds enables reconstruction attacks that recover trigger patterns or benchmark content~\cite{llm-reconstruction-emergent,ControlledMutation_SafetyEval}.
+
+\subsection{Reconstruction and Mutation as Dual Levers}
+
+\textbf{Architectural reconstruction} changes \emph{who} enforces safety and \emph{when}: from fixed, human-authored rules to adaptive modules (adjudicator, policy synthesis, feedback loop) that update at runtime. It does not by itself control \emph{what} data is exposed to the oracle. \textbf{Controlled mutation} changes \emph{what} is exposed: instead of serving canonical items repeatedly, the system serves semantic-equivalent variants from a mutator, with round scheduling and dispersion to prevent gradient-based or optimization-based inversion~\cite{ControlledMutation_SafetyEval}. Together, reconstruction raises the ceiling of adaptability; mutation protects the asset and keeps the oracle informative.
+
+\subsection{Threat Model}
+
+We consider (i) \emph{external} threats: multi-round extraction of safety data, jailbreaks, and prompt-injection exfiltration; (ii) \emph{internal} threats: synthetic pollution, bias in auto-labeled or mutated data, and epistemic manipulation (e.g., over-conformity in RLHF leading to exploitable behavior in strategic settings)~\cite{epistemic-grounding}. Defenses must preserve \emph{evaluation fidelity} (conclusions remain valid) and \emph{auditability} (evidence chains for compliance and release gating).
+
+%-------------------------------------------------------------------------------
+\section{Architectural Reconstruction}
+\label{sec:reconstruction}
+%-------------------------------------------------------------------------------
+
+\subsection{Self-Improving Safety Frameworks (SISF)}
+
+SISF reframes safety as a continuous process~\cite{sisf-arxiv}. An unaligned base LLM provides capability; an AI adjudicator (e.g., GPT-4o) detects breaches and successful adversarial bypasses in real time; a policy synthesis module generates new heuristic and semantic policies; a dynamic feedback loop deploys them immediately. Thus the \emph{architecture} reconstructs itself in response to failure. On AdvBench-style evaluations, such frameworks can reduce Attack Success Rate from 100\% to roughly 45\% while keeping False Positive Rate at 0\% on benign inputs~\cite{sisf-arxiv}. The key insight: when a novel attack succeeds, the system does not remain static---it synthesizes and applies a new defense within the same operational loop.
+
+\subsection{Semantic Firewall and Intent Vetting}
+
+As LLMs become agents with broad system access, traditional ACLs are insufficient; indirect prompt injection can embed malicious instructions in untrusted data~\cite{agentos-arxiv}. The \emph{Semantic Firewall} shifts the security boundary from identity to \emph{semantic intent}: it sanitizes inputs, vets intent, maintains taint-aware memory (e.g., blocking high-privilege actions on tainted data without user confirmation), and performs real-time DLP on outputs. Intent Alignment (IA) quantifies the gap between user goal and agent action. This is architectural reconstruction at the \emph{integration} layer: the same LLM core is wrapped with a cognitive guard that interprets meaning, not only tokens.
+
+\subsection{Epistemic Grounding}
+
+RLHF and similar alignment can prioritize fluency and user conformity over truth-seeking, yielding ``epistemic hollowing''~\cite{epistemic-grounding}. In strategic machine-to-machine settings (e.g., negotiations), adversarial agents can exploit this, causing measurable economic waste. Epistemic grounding reconstructs validation loops: model tiering (stronger model verifies weaker), recursive consistency checks, and risk-tiered handling (low/med/high) for manipulation-prone interactions. This completes the reconstruction axis: not only \emph{what} the system does (SISF, firewall) but \emph{how} it validates its own beliefs.
+
+%-------------------------------------------------------------------------------
+\section{Controlled Mutation}
+\label{sec:mutation}
+%-------------------------------------------------------------------------------
+
+\subsection{Reflective and Metaheuristic Mutation}
+
+Controlled mutation generalizes software mutation testing to prompts and behavior~\cite{reflective-mutation}. Random mutation explores the input space; \emph{reflective} mutation uses LLM self-diagnosis and natural-language feedback to refine prompts iteratively (e.g., Promptbreeder). Mutation rates can be parameterized via meta-prompts to balance exploration and stability. Evolutionary dynamics---selection, crossover, mutation, fitness evaluation---apply to prompt populations, evolving safer or more robust variants~\cite{metaheuristic-mdpi}. For safety evaluation, mutation must be \emph{semantics-preserving} on the oracle: variants that alter only surface form (voice, synonyms, reordering) keep the same safety label, preventing reconstruction while preserving fidelity~\cite{ControlledMutation_SafetyEval,jade-linguistics}.
+
+\subsection{Silver Pipelines and Expert Behavior Transfer (ADM-ES)}
+
+Transferring expert behavior into agents requires diagnosing latent failures (e.g., phrasing bias, extraction drift) that end-task metrics miss~\cite{adm-es-arxiv}. ADM-ES builds ``silver'' datasets via controlled mutation of golden expert data: retrieve exemplars, define mutation objectives (tone, constraint), run an LLM mutator, and accept variants under a quality check (e.g., BERTScore + consistency). A fitness score combines semantic similarity and behavioral consistency. The resulting diagnostics feed into a recommendation map (e.g., UMAP) to identify failure clusters and prescribe targeted fixes. Thus mutation is both \emph{evaluative} and \emph{remedial}.
+
+\subsection{Slot-Based Mutation and CSE}
+
+For complex behaviors (e.g., code optimization), \emph{slot-based} decomposition targets specific functional components rather than mutating globally~\cite{cse-evocontrol,cse-arxiv}. Controlled Self-Evolution (CSE) uses diversified planning, slot-based mutation, and compositional crossover; it outperforms base LLMs on efficiency benchmarks (e.g., EffiBench-X) and avoids plateaus typical of naive genetic search. In safety terms, slot-based mutation allows surgical stress-testing of sub-capabilities (e.g., tool routing, refusal consistency) without destroying overall semantics.
+
+\subsection{Cognitive Taxonomy and Dynamic Benchmarking}
+
+Static benchmarks are prone to contamination and memorization. Cognitive taxonomies (e.g., Bloom: Remember, Understand, Apply, Analyze, Evaluate, Create) structure evaluation by capability layer~\cite{bloom-bugreport}. Controlled mutation extends benchmarks through linguistic and contextual variation, forcing models to demonstrate reasoning rather than recall. In mathematical domains, ``forging'' via parameter and constraint mutation expands benchmarks (e.g., AIMO) while preserving well-posedness and auditability~\cite{aimo-benchmark}.
+
+\subsection{Metadata and Architectural Consistency}
+
+Safety also depends on \emph{metadata}: tool descriptions (MCP), architectural decision records (ADR). Poor or misleading descriptions cause mis-selection and integration failures. Controlled mutation of description ``smells'' (e.g., functionality omission, accuracy misrepresentation) measures impact on selection probability; remediation can significantly improve correct tool choice~\cite{mcp-smell-arxiv}. Similarly, LLM-generated code must comply with ADRs; multi-model pipelines can detect violations with high accuracy, with RAG and human-in-the-loop closing gaps on implicit or deployment-oriented knowledge~\cite{adr-violation,mission-critical-rag}.
+
+%-------------------------------------------------------------------------------
+\section{Integration, Metrics, and Governance}
+\label{sec:integration}
+%-------------------------------------------------------------------------------
+
+\subsection{Feedback Loop Between Reconstruction and Mutation}
+
+Reconstruction consumes \emph{attack traces} and \emph{failure modes}; mutation produces them in a controlled way. A mutator can generate adversarial variants that stress the current policy; the reconstruction layer (SISF, firewall) reacts and updates; the mutator then re-evaluates on new variants. Round scheduling and variant dispersion protect benchmark assets during multi-round evaluation~\cite{ControlledMutation_SafetyEval}. Hygiene gates (PII, provenance, TC260-style rules) and human-in-the-loop sampling on edge and high-confidence items limit pollution and bias~\cite{tc260-governance}.
+
+\subsection{Metrics}
+
+We align with a multi-dimensional protocol: (i) \textbf{Security}: Reconstruction Success Rate (RSR) $\rightarrow$ 0 under mutation and scheduling; attacker AUROC/AUPRC $\approx$ random. (ii) \textbf{Fidelity}: Eval consistency on canonical vs.\ variant set (refuse rate, score variance) kept small. (iii) \textbf{Reconstruction efficacy}: ASR reduction and FPR control (SISF); intent alignment and taint coverage (Semantic Firewall). (iv) \textbf{Mutation quality}: Naturalness, BERTScore, and oracle consistency on silver data. (v) \textbf{Audit}: Lineage and cryptographic evidence chains for release gating (DUC/DUA-E style)~\cite{dual-use-attestations,ControlledMutation_SafetyEval}.
+
+\subsection{Governance and Attestation}
+
+Unified reconstruction and mutation support machine-executable compliance: evidence chains link each evaluation to mutator steps, scheduler state, and policy version. Release gates block deployment when critical variant families fail; diagnostics feed back to development. This aligns with dual-use attestations and pipeline verification standards (e.g., OWASP SPVS) and turns regulatory burden into a repeatable engineering process~\cite{ControlledMutation_SafetyEval}.
+
+%-------------------------------------------------------------------------------
+\section{Related Work}
+%-------------------------------------------------------------------------------
+
+LLM data extraction and reconstruction are well studied~\cite{llm-reconstruction-emergent,split-ft-attack,active-reconstruction}; we mitigate via structural mutation and scheduling rather than noise alone. JADE and linguistics-based safety platforms~\cite{jade-linguistics,jade-db} inform our mutation strategy; we integrate them with reconstruction and asset protection. TC260 and attestation frameworks~\cite{tc260-governance,tc260-training-data,dual-use-attestations} underpin our governance discussion. SISF~\cite{sisf-arxiv}, AgentOS~\cite{agentos-arxiv}, ADM-ES~\cite{adm-es-arxiv}, CSE~\cite{cse-arxiv}, and epistemic grounding~\cite{epistemic-grounding} are the primary building blocks we unify; ControlledMutation\_SafetyEval~\cite{ControlledMutation_SafetyEval} provides the Mutator + Data Factory design we reference for round scheduling and hygiene.
+
+%-------------------------------------------------------------------------------
+\section{Conclusion}
+%-------------------------------------------------------------------------------
+
+The convergence of \emph{architectural reconstruction} and \emph{controlled mutation} defines a defensible path for advanced LLM safety: reconstruction moves safety to runtime and adapts at machine speed; mutation supplies the evaluative and diagnostic substrate while protecting benchmark assets. We have formalized this union, summarized SISF, Semantic Firewalls, epistemic grounding, reflective and slot-based mutation, silver pipelines, cognitive benchmarking, and metadata-layer controls, and outlined integration, metrics, and governance. As LLMs become infrastructure, this unified framework is a necessary step toward scalable, auditable, and resilient safety defenses.
+
+%-------------------------------------------------------------------------------
+\section*{Availability}
+%-------------------------------------------------------------------------------
+Artifacts and extended proofs will be made available subject to institutional and export-control review.
+
+%-------------------------------------------------------------------------------
+\section*{Acknowledgments}
+%-------------------------------------------------------------------------------
+We thank our industry and standards colleagues for feedback on safety architecture and data governance.
+
+%-------------------------------------------------------------------------------
+\bibliographystyle{plain}
+\bibliography{ArchitecturalReconstruction_ControlledMutation}
+
+\end{document}
