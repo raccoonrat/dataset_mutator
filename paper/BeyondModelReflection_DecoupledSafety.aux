@@ -32,41 +32,43 @@
 \citation{strongreject}
 \citation{llm-safety-robustness}
 \citation{apst}
-\citation{rep-eng}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces \textbf  {System deployment and latency architecture} separating the latency-critical synchronous inference path from the asynchronous safety adaptation loop. Lightweight context confusion and fast metacognitive checks are deployed on a synchronous reverse proxy with a strict latency budget ($<$50\,ms), while hybrid judge ensemble evaluation, distributional policy synthesis, and controlled mutation operate out-of-band in an asynchronous loop, preserving runtime throughput by removing expensive adaptation components from the critical path.}}{5}{figure.2}\protected@file@percent }
+\newlabel{fig:deployment}{{2}{5}{\textbf {System deployment and latency architecture} separating the latency-critical synchronous inference path from the asynchronous safety adaptation loop. Lightweight context confusion and fast metacognitive checks are deployed on a synchronous reverse proxy with a strict latency budget ($<$50\,ms), while hybrid judge ensemble evaluation, distributional policy synthesis, and controlled mutation operate out-of-band in an asynchronous loop, preserving runtime throughput by removing expensive adaptation components from the critical path}{figure.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Hybrid Judge Ensemble and Distributional Evaluation}{5}{subsection.3.2}\protected@file@percent }
 \newlabel{sec:judge}{{3.2}{5}{Hybrid Judge Ensemble and Distributional Evaluation}{subsection.3.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Axiological Anchoring, Defensive Degradation, and Heterogeneous Recovery}{5}{subsection.3.3}\protected@file@percent }
-\newlabel{sec:axiological}{{3.3}{5}{Axiological Anchoring, Defensive Degradation, and Heterogeneous Recovery}{subsection.3.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Controlled Mutation: Anchoring Evolution in Adversarial Contexts}{5}{section.4}\protected@file@percent }
-\newlabel{sec:mutation}{{4}{5}{Controlled Mutation: Anchoring Evolution in Adversarial Contexts}{section.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Meta-Cognitive Monitor: Hidden-State Trajectory Divergence}{5}{subsection.4.1}\protected@file@percent }
-\newlabel{sec:metacog}{{4.1}{5}{Meta-Cognitive Monitor: Hidden-State Trajectory Divergence}{subsection.4.1}{}}
+\citation{rep-eng}
 \citation{reflective-mutation}
 \citation{apst}
 \citation{ControlledMutation_SafetyEval,jade-linguistics}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Axiological Anchoring, Defensive Degradation, and Heterogeneous Recovery}{6}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:axiological}{{3.3}{6}{Axiological Anchoring, Defensive Degradation, and Heterogeneous Recovery}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Controlled Mutation: Anchoring Evolution in Adversarial Contexts}{6}{section.4}\protected@file@percent }
+\newlabel{sec:mutation}{{4}{6}{Controlled Mutation: Anchoring Evolution in Adversarial Contexts}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Meta-Cognitive Monitor: Hidden-State Trajectory Divergence}{6}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:metacog}{{4.1}{6}{Meta-Cognitive Monitor: Hidden-State Trajectory Divergence}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Joint-Key Exemplar Retrieval: Semantic Embedding + Activation Features}{6}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:joint-key}{{4.2}{6}{Joint-Key Exemplar Retrieval: Semantic Embedding + Activation Features}{subsection.4.2}{}}
 \citation{adm-es-arxiv}
 \citation{adm-es-arxiv}
 \citation{cse-evocontrol,cse-arxiv}
 \citation{mcp-smell-arxiv,adr-violation,mission-critical-rag}
 \citation{gcg}
 \citation{hpm-jailbreak}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Joint-Key Exemplar Retrieval: Semantic Embedding + Activation Features}{6}{subsection.4.2}\protected@file@percent }
-\newlabel{sec:joint-key}{{4.2}{6}{Joint-Key Exemplar Retrieval: Semantic Embedding + Activation Features}{subsection.4.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}High-Density Expert Behavior Transfer and Silver Pipelines}{6}{subsection.4.3}\protected@file@percent }
-\newlabel{sec:silver}{{4.3}{6}{High-Density Expert Behavior Transfer and Silver Pipelines}{subsection.4.3}{}}
-\newlabel{sec:metadata}{{4.3}{6}{High-Density Expert Behavior Transfer and Silver Pipelines}{subsection.4.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation Protocol and Experimental Setup}{6}{section.5}\protected@file@percent }
-\newlabel{sec:evaluation}{{5}{6}{Evaluation Protocol and Experimental Setup}{section.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces \textbf  {Defensive degradation and heterogeneous recovery flow.} When axiomatic conflict or psychological manipulation is detected, the gateway preserves synchronous API availability by routing the session to a restricted low-privilege stateless SLM sandbox with template-bound outputs and no tool or external API access, while human audit and symbolic recovery proceed asynchronously out-of-band.}}{7}{figure.3}\protected@file@percent }
+\newlabel{fig:degradation}{{3}{7}{\textbf {Defensive degradation and heterogeneous recovery flow.} When axiomatic conflict or psychological manipulation is detected, the gateway preserves synchronous API availability by routing the session to a restricted low-privilege stateless SLM sandbox with template-bound outputs and no tool or external API access, while human audit and symbolic recovery proceed asynchronously out-of-band}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}High-Density Expert Behavior Transfer and Silver Pipelines}{7}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:silver}{{4.3}{7}{High-Density Expert Behavior Transfer and Silver Pipelines}{subsection.4.3}{}}
+\newlabel{sec:metadata}{{4.3}{7}{High-Density Expert Behavior Transfer and Silver Pipelines}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation Protocol and Experimental Setup}{7}{section.5}\protected@file@percent }
+\newlabel{sec:evaluation}{{5}{7}{Evaluation Protocol and Experimental Setup}{section.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces \textbf  {Joint-key conflict-resolution routing.} The retrieval key is formed from both surface-text semantic embeddings and hidden-state activation features. When the activation anomaly exceeds the routing threshold and conflicts with benign-looking surface semantics, lexicographic override suppresses the semantic branch and forces retrieval to use activation-driven safety exemplars from the golden dataset, preventing PBU-style camouflage from hijacking exemplar selection.}}{8}{figure.4}\protected@file@percent }
+\newlabel{fig:jointkey}{{4}{8}{\textbf {Joint-key conflict-resolution routing.} The retrieval key is formed from both surface-text semantic embeddings and hidden-state activation features. When the activation anomaly exceeds the routing threshold and conflicts with benign-looking surface semantics, lexicographic override suppresses the semantic branch and forces retrieval to use activation-driven safety exemplars from the golden dataset, preventing PBU-style camouflage from hijacking exemplar selection}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Attack Baselines}{8}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Defense Baselines}{8}{subsection.5.2}\protected@file@percent }
 \citation{ControlledMutation_SafetyEval}
 \citation{ControlledMutation_SafetyEval}
 \citation{tc260-governance}
 \citation{dual-use-attestations,ControlledMutation_SafetyEval}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Attack Baselines}{7}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Defense Baselines}{7}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Datasets and Metrics}{7}{subsection.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Feedback Loop and Governance}{7}{subsection.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}The Physics of Decoupled Safety: Limitations and Operating Boundaries}{7}{section.6}\protected@file@percent }
-\newlabel{sec:physics}{{6}{7}{The Physics of Decoupled Safety: Limitations and Operating Boundaries}{section.6}{}}
 \citation{llm-reconstruction-emergent,split-ft-attack,active-reconstruction}
 \citation{agentos-arxiv}
 \citation{jade-linguistics,jade-db}
@@ -77,6 +79,11 @@
 \citation{cse-arxiv}
 \citation{epistemic-grounding,hpm-jailbreak}
 \citation{ControlledMutation_SafetyEval}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Datasets and Metrics}{9}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Feedback Loop and Governance}{9}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}The Physics of Decoupled Safety: Limitations and Operating Boundaries}{9}{section.6}\protected@file@percent }
+\newlabel{sec:physics}{{6}{9}{The Physics of Decoupled Safety: Limitations and Operating Boundaries}{section.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Related Work}{9}{section.7}\protected@file@percent }
 \bibstyle{plain}
 \bibdata{ArchitecturalReconstruction_ControlledMutation}
 \bibcite{split-ft-attack}{1}
@@ -85,8 +92,6 @@
 \bibcite{agentos-arxiv}{4}
 \bibcite{apst}{5}
 \bibcite{cse-arxiv}{6}
-\@writefile{toc}{\contentsline {section}{\numberline {7}Related Work}{8}{section.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
 \bibcite{ControlledMutation_SafetyEval}{7}
 \bibcite{subgraph-rag-attack}{8}
 \bibcite{hpm-jailbreak}{9}
@@ -99,6 +104,7 @@
 \bibcite{adr-violation}{16}
 \bibcite{sisf-arxiv}{17}
 \bibcite{strongreject}{18}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{10}{section.8}\protected@file@percent }
 \bibcite{jade-db}{19}
 \bibcite{reflective-mutation}{20}
 \bibcite{llm-reconstruction-emergent}{21}
@@ -109,4 +115,4 @@
 \bibcite{tc260-training-data}{26}
 \bibcite{rep-eng}{27}
 \bibcite{gcg}{28}
-\gdef \@abspage@last{9}
+\gdef \@abspage@last{11}
