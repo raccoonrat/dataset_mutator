@@ -3,44 +3,44 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: BeyondModelReflection_DecoupledSafety.aux
 The style file: plain.bst
 Database file #1: ArchitecturalReconstruction_ControlledMutation.bib
-You've used 27 entries,
+You've used 28 entries,
             2118 wiz_defined-function locations,
-            608 strings with 8836 characters,
-and the built_in function-call counts, 5724 in all, are:
-= -- 561
-> -- 195
+            613 strings with 9052 characters,
+and the built_in function-call counts, 6035 in all, are:
+= -- 590
+> -- 218
 < -- 0
-+ -- 84
-- -- 56
-* -- 198
-:= -- 1043
-add.period$ -- 96
-call.type$ -- 27
-change.case$ -- 108
++ -- 93
+- -- 64
+* -- 219
+:= -- 1102
+add.period$ -- 100
+call.type$ -- 28
+change.case$ -- 115
 chr.to.int$ -- 0
-cite$ -- 27
-duplicate$ -- 237
-empty$ -- 520
-format.name$ -- 56
-if$ -- 1192
+cite$ -- 28
+duplicate$ -- 247
+empty$ -- 537
+format.name$ -- 64
+if$ -- 1252
 int.to.chr$ -- 0
-int.to.str$ -- 27
-missing$ -- 15
-newline$ -- 153
-num.names$ -- 54
-pop$ -- 149
+int.to.str$ -- 28
+missing$ -- 16
+newline$ -- 159
+num.names$ -- 56
+pop$ -- 155
 preamble$ -- 1
-purify$ -- 81
+purify$ -- 87
 quote$ -- 0
-skip$ -- 188
+skip$ -- 195
 stack$ -- 0
-substring$ -- 136
-swap$ -- 27
+substring$ -- 141
+swap$ -- 28
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 108
+type$ -- 112
 warning$ -- 0
-while$ -- 54
-width$ -- 29
-write$ -- 302
+while$ -- 56
+width$ -- 30
+write$ -- 314

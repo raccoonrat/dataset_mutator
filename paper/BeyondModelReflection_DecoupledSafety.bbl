@@ -181,4 +181,11 @@ Zou et~al.
 \newblock {\em arXiv}, 2023.
 \newblock \url{https://arxiv.org/abs/2310.01405}.
 
+\bibitem{gcg}
+Andy Zou, Zifan Wang, J.~Zico Kolter, and Matt Fredrikson.
+\newblock Universal and transferable adversarial attacks on aligned language
+  models.
+\newblock {\em arXiv preprint arXiv:2307.15043}, 2023.
+\newblock Greedy Coordinate Gradient (GCG) jailbreak.
+
 \end{thebibliography}
