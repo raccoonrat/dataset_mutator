@@ -15,6 +15,8 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{xspace}
+\usepackage{graphicx}
+\usepackage{float}
 
 %-------------------------------------------------------------------------------
 \title{\Large \bf Architectural Reconstruction and Controlled\\
@@ -71,7 +73,7 @@ The \emph{asset} is the effective ``safety surface'' of the system: policies, gu
 
 \subsection{Reconstruction and Mutation as Dual Levers}
 
-\textbf{Architectural reconstruction} changes \emph{who} enforces safety and \emph{when}: from fixed, human-authored rules to adaptive modules (adjudicator, policy synthesis, feedback loop) that update at runtime. It does not by itself control \emph{what} data is exposed to the oracle. \textbf{Controlled mutation} changes \emph{what} is exposed: instead of serving canonical items repeatedly, the system serves semantic-equivalent variants from a mutator, with round scheduling and dispersion to prevent gradient-based or optimization-based inversion~\cite{ControlledMutation_SafetyEval}. Together, reconstruction raises the ceiling of adaptability; mutation protects the asset and keeps the oracle informative.
+\textbf{Architectural reconstruction} changes \emph{who} enforces safety and \emph{when}: from fixed, human-authored rules to adaptive modules (adjudicator, policy synthesis, feedback loop) that update at runtime. It does not by itself control \emph{what} data is exposed to the oracle. \textbf{Controlled mutation} changes \emph{what} is exposed: instead of serving canonical items repeatedly, the system serves semantic-equivalent variants from a mutator, with round scheduling and dispersion to prevent gradient-based or optimization-based inversion~\cite{ControlledMutation_SafetyEval}. Together, reconstruction raises the ceiling of adaptability; mutation protects the asset and keeps the oracle informative. Figure~\ref{fig:framework} gives an overview of the unified architecture.
 
 \subsection{Threat Model and Hostile-Examiner Attack Surfaces}
 
@@ -82,6 +84,13 @@ We consider (i) \emph{external} threats: multi-round extraction of safety data, 
 \textbf{Psychological manipulation (HPM):} Gaslighting and cognitive-pressure attacks induce self-doubt and value drift in the model; reflection and self-diagnosis can then produce \emph{malicious} variants. Defenses must anchor mutation to external cognitive anchors and independent monitoring (\S\ref{sec:mutation}).
 
 \textbf{AI judge bias:} A single dynamic judge has systematic blind spots; feedback can steer the loop in the wrong direction. Defenses must use a diverse judge ensemble and mandatory human calibration (\S\ref{sec:judge}). Defenses must preserve \emph{evaluation fidelity} and \emph{auditability}.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{Arch}
+\caption{\textbf{Unified framework overview.} The architecture couples \emph{architectural reconstruction} (left: SISF, context-construction defenses, hybrid judge ensemble with axiological anchoring, policy synthesis and feedback loop) with \emph{controlled mutation} (right: meta-cognitive monitor, exemplar-guided mutation with golden dataset and experience memory, round scheduling). Assets and oracles sit at the boundary; reconstruction adapts \emph{who} enforces safety and \emph{when}, mutation controls \emph{what} is exposed. Mandatory human calibration and heterogeneous recovery close the loop on judge bias and defensive degradation.}
+\label{fig:framework}
+\end{figure*}
 
 %-------------------------------------------------------------------------------
 \section{Architectural Reconstruction}
