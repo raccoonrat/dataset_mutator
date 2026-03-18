@@ -35,6 +35,12 @@ AIMO Authors.
 \newblock
   \url{https://storage.googleapis.com/kaggle-forum-message-attachments/3404163/36118/main.pdf}.
 
+\bibitem{apst}
+APST Authors.
+\newblock Accelerated prompt stress testing.
+\newblock {\em arXiv}, 2025.
+\newblock Same prompt can flip refuse/pass across runs at T=0.
+
 \bibitem{bloom-bugreport}
 Bug Report~{LLM} Authors.
 \newblock Test case generation from bug reports via large language models: A
@@ -56,10 +62,10 @@ Dataset~Mutator Authors.
 
 \bibitem{subgraph-rag-attack}
 Graph {RAG}~Security Authors.
-\newblock Subgraph reconstruction attacks on graph {RAG} deployments: Residual
-  extraction under multi-layer defenses, 2025.
-\newblock Empirical F1 under ID alignment, decoy, and reject; residual
-  extraction in mid-teens. \url{https://arxiv.org/abs/2502.xxxxx}.
+\newblock Subgraph reconstruction attacks on graph {RAG} deployments with
+  practical defenses ({GRASP}): Residual extraction under multi-layer defenses,
+  2025.
+\newblock Empirical F1 mid-teens with ID alignment, decoy, and reject.
 
 \bibitem{hpm-jailbreak}
 HPM Authors.
@@ -75,6 +81,13 @@ JADE Authors.
 \newblock {\em arXiv}, 2023.
 \newblock \url{https://arxiv.org/html/2311.00286v3}.
 
+\bibitem{llm-safety-robustness}
+LLM Safety~Robustness Authors.
+\newblock Llm-safety evaluations lack robustness.
+\newblock {\em arXiv}, 2025.
+\newblock Format sensitivity: whitespace, system prompt, chat template, special
+  tokens cause ASR swing 8--14\%.
+
 \bibitem{mcp-smell-arxiv}
 MCP~Smell Authors.
 \newblock From docs to descriptions: Smell-aware evaluation of {MCP} server
@@ -88,6 +101,14 @@ OpenReview Authors.
   exploitation in {LLM} negotiations.
 \newblock In {\em OpenReview}, 2025.
 \newblock \url{https://openreview.net/forum?id=z6uPONc8h1}.
+
+\bibitem{pbu-reconstruct}
+PBU/Reconstruct Authors.
+\newblock Reconstruct your previous conversations! {PBU} and composite
+  defenses.
+\newblock {\em arXiv}, 2025.
+\newblock Semantic similarity leak 0.75+ under PBU; composite defenses largely
+  fail.
 
 \bibitem{mission-critical-rag}
 ResearchGate Authors.
