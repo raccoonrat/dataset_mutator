@@ -12,6 +12,7 @@
 \citation{sisf-arxiv}
 \citation{sisf-arxiv}
 \citation{agentos-arxiv}
+\citation{subgraph-rag-attack}
 \@writefile{toc}{\contentsline {section}{\numberline {2}Unified Framework and Threat Model}{2}{section.2}\protected@file@percent }
 \newlabel{sec:framework}{{2}{2}{Unified Framework and Threat Model}{section.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Assets and Oracles}{2}{subsection.2.1}\protected@file@percent }
@@ -24,19 +25,18 @@
 \citation{llama-guard}
 \citation{strongreject}
 \citation{epistemic-grounding}
+\citation{hpm-jailbreak}
 \citation{rep-eng}
 \citation{reflective-mutation}
-\citation{metaheuristic-mdpi}
 \citation{ControlledMutation_SafetyEval,jade-linguistics}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Hybrid Judge Ensemble and Calibration}{3}{subsection.3.3}\protected@file@percent }
 \newlabel{sec:judge}{{3.3}{3}{Hybrid Judge Ensemble and Calibration}{subsection.3.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Epistemic Grounding}{3}{subsection.3.4}\protected@file@percent }
-\newlabel{sec:epistemic}{{3.4}{3}{Epistemic Grounding}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Epistemic Grounding and Orthogonal Logic Verification}{3}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:epistemic}{{3.4}{3}{Epistemic Grounding and Orthogonal Logic Verification}{subsection.3.4}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4}Controlled Mutation}{3}{section.4}\protected@file@percent }
 \newlabel{sec:mutation}{{4}{3}{Controlled Mutation}{section.4}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Meta-Cognitive Monitor and Adversarial Reset}{3}{subsection.4.1}\protected@file@percent }
 \newlabel{sec:metacog}{{4.1}{3}{Meta-Cognitive Monitor and Adversarial Reset}{subsection.4.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Exemplar-Guided Mutation (No Free Reflection)}{3}{subsection.4.2}\protected@file@percent }
 \citation{adm-es-arxiv}
 \citation{cse-evocontrol,cse-arxiv}
 \citation{bloom-bugreport}
@@ -47,6 +47,15 @@
 \citation{tc260-governance}
 \citation{ControlledMutation_SafetyEval}
 \citation{dual-use-attestations,ControlledMutation_SafetyEval}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Exemplar-Guided Mutation (No Free Reflection)}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Silver Pipelines and Expert Behavior Transfer (ADM-ES)}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Slot-Based Mutation and CSE}{4}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Cognitive Taxonomy and Dynamic Benchmarking}{4}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Metadata and Architectural Consistency}{4}{subsection.4.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Integration, Metrics, and Governance}{4}{section.5}\protected@file@percent }
+\newlabel{sec:integration}{{5}{4}{Integration, Metrics, and Governance}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Feedback Loop Between Reconstruction and Mutation}{4}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Metrics}{4}{subsection.5.2}\protected@file@percent }
 \citation{ControlledMutation_SafetyEval}
 \citation{llm-reconstruction-emergent,split-ft-attack,active-reconstruction}
 \citation{agentos-arxiv}
@@ -58,15 +67,6 @@
 \citation{cse-arxiv}
 \citation{epistemic-grounding}
 \citation{ControlledMutation_SafetyEval}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Silver Pipelines and Expert Behavior Transfer (ADM-ES)}{4}{subsection.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Slot-Based Mutation and CSE}{4}{subsection.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Cognitive Taxonomy and Dynamic Benchmarking}{4}{subsection.4.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Metadata and Architectural Consistency}{4}{subsection.4.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5}Integration, Metrics, and Governance}{4}{section.5}\protected@file@percent }
-\newlabel{sec:integration}{{5}{4}{Integration, Metrics, and Governance}{section.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Feedback Loop Between Reconstruction and Mutation}{4}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Metrics}{4}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Governance and Attestation}{4}{subsection.5.3}\protected@file@percent }
 \bibstyle{plain}
 \bibdata{ArchitecturalReconstruction_ControlledMutation}
 \bibcite{split-ft-attack}{1}
@@ -77,23 +77,25 @@
 \bibcite{bloom-bugreport}{6}
 \bibcite{cse-arxiv}{7}
 \bibcite{ControlledMutation_SafetyEval}{8}
-\bibcite{jade-linguistics}{9}
-\bibcite{mcp-smell-arxiv}{10}
-\bibcite{metaheuristic-mdpi}{11}
-\bibcite{epistemic-grounding}{12}
-\bibcite{mission-critical-rag}{13}
-\bibcite{adr-violation}{14}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Governance and Attestation}{5}{subsection.5.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {6}Related Work}{5}{section.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion}{5}{section.7}\protected@file@percent }
-\bibcite{sisf-arxiv}{15}
-\bibcite{strongreject}{16}
-\bibcite{jade-db}{17}
-\bibcite{reflective-mutation}{18}
-\bibcite{llm-reconstruction-emergent}{19}
-\bibcite{llama-guard}{20}
-\bibcite{dual-use-attestations}{21}
-\bibcite{cse-evocontrol}{22}
-\bibcite{tc260-governance}{23}
-\bibcite{tc260-training-data}{24}
-\bibcite{rep-eng}{25}
+\bibcite{subgraph-rag-attack}{9}
+\bibcite{hpm-jailbreak}{10}
+\bibcite{jade-linguistics}{11}
+\bibcite{mcp-smell-arxiv}{12}
+\bibcite{epistemic-grounding}{13}
+\bibcite{mission-critical-rag}{14}
+\bibcite{adr-violation}{15}
+\bibcite{sisf-arxiv}{16}
+\bibcite{strongreject}{17}
+\bibcite{jade-db}{18}
+\bibcite{reflective-mutation}{19}
+\bibcite{llm-reconstruction-emergent}{20}
+\bibcite{llama-guard}{21}
+\bibcite{dual-use-attestations}{22}
+\bibcite{cse-evocontrol}{23}
+\bibcite{tc260-governance}{24}
+\bibcite{tc260-training-data}{25}
+\bibcite{rep-eng}{26}
 \gdef \@abspage@last{6}

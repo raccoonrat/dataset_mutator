@@ -54,6 +54,20 @@ Dataset~Mutator Authors.
   evaluation: Protecting benchmark assets without sacrificing fidelity.
 \newblock Companion paper, same repository, 2025.
 
+\bibitem{subgraph-rag-attack}
+Graph {RAG}~Security Authors.
+\newblock Subgraph reconstruction attacks on graph {RAG} deployments: Residual
+  extraction under multi-layer defenses, 2025.
+\newblock Empirical F1 under ID alignment, decoy, and reject; residual
+  extraction in mid-teens. \url{https://arxiv.org/abs/2502.xxxxx}.
+
+\bibitem{hpm-jailbreak}
+HPM Authors.
+\newblock Jailbreaking large language models via human-like psychological
+  manipulation ({HPM}).
+\newblock {\em arXiv}, 2024.
+\newblock \url{https://arxiv.org/abs/2410.06408}.
+
 \bibitem{jade-linguistics}
 JADE Authors.
 \newblock {JADE}: A linguistics-based safety evaluation platform for large
@@ -67,12 +81,6 @@ MCP~Smell Authors.
   descriptions.
 \newblock {\em arXiv}, 2026.
 \newblock \url{https://arxiv.org/abs/2602.18914}.
-
-\bibitem{metaheuristic-mdpi}
-MDPI Authors.
-\newblock Recent advances in metaheuristic algorithms.
-\newblock {\em MDPI Algorithms}, 19(1), 2026.
-\newblock \url{https://www.mdpi.com/1999-4893/19/1/19}.
 
 \bibitem{epistemic-grounding}
 OpenReview Authors.
