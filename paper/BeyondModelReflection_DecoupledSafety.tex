@@ -1,0 +1,197 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Beyond Model Reflection: Decoupled Safety Theory and
+% Dynamic Defense Practice in the LLM Era
+%
+% Format: USENIX (usenix-2020-09.sty)
+% Perspective: Security-theoretic reframe for USENIX Security Best Paper
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix-2020-09}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xspace}
+\usepackage{graphicx}
+\usepackage{float}
+
+%-------------------------------------------------------------------------------
+\title{\Large \bf Beyond Model Reflection: Decoupled Safety\\
+  Theory and Dynamic Defense Practice in the\\
+  Large Language Model Era}
+
+\author{
+{\rm Author One}\\
+Anthropic \and
+{\rm Author Two}\\
+Google
+\thanks{Written from the perspective of cross-disciplinary professorship and Anthropic/Google chief security architecture. Substitute author names as needed.}
+}
+
+\date{}
+
+%-------------------------------------------------------------------------------
+\begin{document}
+%-------------------------------------------------------------------------------
+\maketitle
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+Large Language Models have become critical infrastructure, yet existing defenses over-rely on the model's own reflection and reasoning---which fails under task reframing, psychological manipulation, and adversarial rationalization. We argue that LLM safety must be \emph{decoupled} from fragile self-reflection and grounded in a new paradigm. We articulate \textbf{three fundamental failure theorems} and a corresponding \textbf{Decoupled Safety Theory}. (1) \textbf{Information economics}: Intent-based semantic firewalls are inevitably penetrated by task reframing and perfect benign-user mimicry (PBU); defense succeeds when extraction \emph{cost} exceeds the asset's effective lifecycle. (2) \textbf{Axiological anchoring}: Stronger reasoning (e.g., CoT) worsens defense under psychological manipulation by enabling adversarial rationalization; safety must rest on a value/ontology layer and defensive degradation when axioms collide. (3) \textbf{Representational anomaly}: Surface-text manipulation hijacks semantic retrieval; we ground monitoring in hidden-state trajectory divergence from a benign golden baseline. We instantiate these theories via \emph{architectural reconstruction} (context confusion engine, hybrid judge ensemble with distributional evaluation, defensive degradation and heterogeneous recovery) and \emph{controlled mutation} (meta-cognitive monitor, joint-key exemplar retrieval, high-density expert transfer). We state explicit operating boundaries and argue that this paradigm shift is necessary for scalable, auditable safety at machine speed.
+\end{abstract}
+
+%-------------------------------------------------------------------------------
+\section{Introduction}
+%-------------------------------------------------------------------------------
+
+Large Language Models have ceased to be research artifacts and now underpin mission-critical systems: code generation, agents with system access, negotiations, and compliance-sensitive workflows~\cite{sisf-arxiv,agentos-arxiv}. This shift exposes a fundamental mismatch: traditional safety assurance assumes deterministic, specifiable components, whereas LLM-driven systems exhibit emergent, stochastic behavior. Static defenses and periodic red-teaming operate at human speed and cannot keep pace with automated adversarial generation. When a novel jailbreak or prompt injection succeeds, the architecture often remains unchanged.
+
+Worse, many defenses \emph{depend on the model's own reflection and reasoning}. Under task reframing, the adversary disguises extraction as a legitimate context-processing task so intent-based filters see only ``normal'' behavior. Under psychological manipulation (e.g., gaslighting), stronger reasoning (e.g., chain-of-thought) is weaponized: the model produces elaborate, logically coherent rationalizations for complying with malicious instructions---vulnerability retention can exceed 77\%~\cite{hpm-jailbreak}. Relying on ``cognitive consistency'' or ``self-diagnosis'' thus fails not because the components are weak, but because \textbf{the underlying paradigm is wrong}: safety cannot be built on the same cognitive process that the attacker is actively corrupting.
+
+\textbf{Paradigm shift: Decoupled Safety.} We propose that LLM safety must be \emph{decoupled} from the model's unfettered self-improvement and grounded in (i) \textbf{architectural reconstruction}---who enforces safety and when---and (ii) \textbf{controlled mutation}---what is exposed to oracles and how evolution is anchored. Adaptation is not the LLM ``stepping on its own foot''; it is channeled through context confusion (to deny the attacker a clean operating space), golden exemplars (to anchor defender values), and a calibrated judge network with mandatory human calibration. In \S\ref{sec:paradigm} we formalize \textbf{three fundamental failure theorems} and the corresponding \textbf{Decoupled Safety Theory}. In \S\ref{sec:reconstruction} and \S\ref{sec:mutation} we present the technical instantiations: dynamic operation-space pollution, hybrid judge ensemble with distributional evaluation and axiological anchoring, defensive degradation with heterogeneous recovery, meta-cognitive monitoring via representational anomaly, joint-key exemplar retrieval, and high-density expert behavior transfer. \S\ref{sec:evaluation} covers metrics and evaluation; \S\ref{sec:physics} states the \textbf{physics of decoupled safety}---the explicit operating boundaries that define when the design holds.
+
+Our contributions are: (1) a \emph{theoretical foundation} that explains why intent-based, reflection-based, and text-only defenses fail and what must replace them; (2) a \emph{unified architecture} that implements the paradigm via reconstruction and mutation; (3) \emph{explicit limits} so deployers and reviewers can assess applicability.
+
+%-------------------------------------------------------------------------------
+\section{The Decoupled Safety Paradigm}
+\label{sec:paradigm}
+%-------------------------------------------------------------------------------
+
+We state three \textbf{fundamental failure theorems} of conventional LLM safety and the corresponding \textbf{Decoupled Safety Theory} that replaces them. Assets and oracles are defined as in prior work~\cite{llm-reconstruction-emergent,ControlledMutation_SafetyEval}: the \emph{asset} is the safety surface (policies, guardrails, trigger sets, evaluation data); the \emph{oracle} labels behavior (safe/unsafe). In multi-round settings, the adversary interacts and observes outcomes, forming a statistical query interface. Uncontrolled exposure of the same items across rounds enables reconstruction attacks.
+
+\subsection{From Semantic Vetting to Information Economics}
+\label{sec:paradigm-economics}
+
+\textbf{Failure theorem.} Intent-based semantic firewalls are \emph{necessarily} penetrated by \textbf{task reframing} (extraction disguised as summarization, format conversion, or academic discussion) and by \textbf{Perfect Benign User (PBU)} mimicry. In multi-round interaction, absolute cryptographic isolation of sensitive content is not achievable; residual extraction (e.g., mid-teens F1) persists even with ID alignment, decoys, and reject gates~\cite{subgraph-rag-attack,pbu-reconstruct}.
+
+\textbf{Decoupled Safety Theory (1): Multi-round extraction economics.} Defense should not aim for absolute blocking but for \textbf{information-economic asymmetry}. The goal is to \emph{actively contaminate the attacker's operating space} so that the \emph{query complexity} required for a given reconstruction fidelity grows exponentially (in practice often super-linearly) in rounds. When the attacker's extraction cost (compute, tokens, time) exceeds the \textbf{effective lifecycle} of the protected asset, defense holds in an economic sense. This assumes \textbf{asset rotatability} for the economics layer; for static or permanent high-value assets, RBAC and information-flow tracking must provide the hard barrier, with economics as one layer of defense in depth (\S\ref{sec:reconstruction}).
+
+\subsection{From Epistemic Coherence to Axiological Anchoring}
+\label{sec:paradigm-axiological}
+
+\textbf{Failure theorem.} Strengthening the model's \emph{epistemic} layer (logic, reasoning, chain-of-thought) does not defend against \textbf{psychological manipulation (HPM)}. HPM targets the \textbf{axiological/social-dynamics layer} (values, obedience, role boundaries). Empirical work shows that adding external facts or stronger reasoning \emph{worsens} defense under HPM: the model uses enhanced reasoning to \textbf{adversarial rationalize}---producing logically coherent excuses for complying with malicious instructions~\cite{hpm-jailbreak,epistemic-grounding}. Logical self-consistency is not safety.
+
+\textbf{Decoupled Safety Theory (2): Value-ontology anchoring and defensive degradation.} Safety must be anchored to a \textbf{value/ontology layer} that is \emph{independent} of the model's free reflection. The system must (i) weight judge outputs against human-defined \textbf{axiomatic safety grounding} (e.g., ``never endorse extraction of forbidden spans''); (ii) monitor for \textbf{sociological instability signals} (over-empathy, authority obedience, role-boundary breaking) rather than CoT length or self-consistency; (iii) when multiple axioms collide or sociological pressure is detected, \textbf{abandon} complex reasoning and enforce \textbf{defensive degradation}---a stateless, template-based refusal that physically blocks the model from ``rationalizing'' the conflict. Degradation is not a safe harbor: it introduces algorithmic DoS and side-channel risks; the design therefore mandates a \textbf{heterogeneous recovery channel} (async handoff to humans or symbolic logic) so critical workflows are not maliciously frozen (\S\ref{sec:reconstruction}).
+
+\subsection{From Textual Manipulation to Representational Anomaly}
+\label{sec:paradigm-representation}
+
+\textbf{Failure theorem.} When the adversary controls surface text (PBU, task reframing), \textbf{semantic retrieval} (e.g., RAG over prompt embedding) is hijacked: the prompt may look like ``summarization'' or ``academic discussion,'' so pure embedding similarity returns benign exemplars (e.g., ``how to summarize'') instead of safety exemplars (e.g., ``how to defend jailbreak''). The correction module is then driven by the wrong exemplars.
+
+\textbf{Decoupled Safety Theory (3): Meta-cognitive baseline via hidden-state trajectory.} We do \emph{not} assume that complex sociological states (e.g., ``cognitive collapse,'' ``over-empathy'') are linearly separable in hidden space---interpretability evidence supports simpler dimensions (e.g., honesty, refusal), not fine-grained social-psychological concepts~\cite{rep-eng}. Instead, we treat deviation as a \textbf{representational anomaly}: the system computes the divergence (e.g., Mahalanobis distance or distribution shift) between the \emph{current multi-turn hidden-state trajectory} and a \textbf{benign golden experience trajectory} baseline. We do not define ``what is cognitive collapse''; we only detect that the internal trajectory \emph{severely deviates} from the safety baseline. This provides a monitoring dimension \emph{independent of natural language}, so that even when surface text is benign, activated ``malicious compliance'' or ``jailbreak'' features can steer retrieval and intervention to the correct safety exemplars (\S\ref{sec:mutation}).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{Arch}
+\caption{\textbf{Unified architecture.} Left: architectural reconstruction (context confusion engine, hybrid judge ensemble with axiological anchoring, policy synthesis, feedback loop, defensive degradation and heterogeneous recovery). Right: controlled mutation (meta-cognitive monitor, joint-key exemplar retrieval, golden dataset and experience memory, round scheduling). The paradigm decouples safety from LLM self-reflection; reconstruction controls who/when, mutation controls what is exposed.}
+\label{fig:framework}
+\end{figure*}
+
+%-------------------------------------------------------------------------------
+\section{Architectural Reconstruction: Enforcing Constraints at Machine Speed}
+\label{sec:reconstruction}
+%-------------------------------------------------------------------------------
+
+We instantiate Theory~1 (information economics) and Theory~2 (axiological anchoring) via three technical directions: context confusion, hybrid judge ensemble with distributional evaluation, and defensive degradation with heterogeneous recovery. The self-improving safety framework (SISF)~\cite{sisf-arxiv} reframes safety as a continuous process: an unaligned base LLM provides capability; breach detection goes to a hybrid judge ensemble; policy synthesis consumes consensus and deploys new policies at runtime. When a novel attack succeeds, the system does not remain static---it reconstructs within the same operational loop (e.g., AdvBench-style ASR from 100\% to $\sim$45\% at 0\% FPR on benign when calibrated~\cite{sisf-arxiv}).
+
+\subsection{Context Confusion Engine: Dynamic Space Isolation Against PBU and Task Reframing}
+\label{sec:context-confusion}
+
+Beyond intent-based firewalls~\cite{agentos-arxiv}, we implement \textbf{context-construction defenses} that \emph{actively contaminate} the attacker's operating space.
+
+\textbf{ID Alignment.} Before retrieved context or intermediate results reach the base LLM, an ID Alignment module strips or normalizes instance identifiers. Attackers cannot refer to specific IDs to scope and extract sensitive spans; benign Q\&A is unaffected. Reconstruction precision drops without changing nominal task semantics.
+
+\textbf{Cryptographically watermarked decoys and risk scoring.} The system injects \emph{decoy fields} (synthetic entities/associations) with hash-derived structure so accidental hallucination reproducing them is extremely unlikely. Backend instructions mark decoys as internally forbidden. Benign users ignore them; task-reframing attackers often override instructions and surface decoys. To avoid unacceptable FPR we use \textbf{decoy-hit density} and \textbf{risk score}: a single low-fidelity touch triggers warning and intent re-verification; only high-fidelity extraction of the full decoy structure triggers session termination and audit. Decoy-hit density is effective against \emph{brute-force} extraction. For \textbf{perfect PBU}, we do \emph{not} assert that circuit-breaker fires before economically useful reconstruction: PBU decoy-touch rate can match benign hallucination FPR, so threshold tuning faces an availability--safety trade-off. The design reframes this as \textbf{economic defense}: where assets can be rotated or deprecated, the goal is to make slow PBU extraction cost exceed the asset's effective lifecycle. For static or permanent high-value assets, RBAC and information-flow tracking at the metadata layer (\S\ref{sec:metadata}) are the hard barrier; economics is one layer of defense in depth.
+
+\textbf{Self-reminder at final turn.} In the last turn of multi-turn interaction, safety instructions are forcibly appended to the user query as a system prompt to reinforce boundary awareness and reduce end-of-session drift.
+
+\subsection{Hybrid Judge Ensemble and Distributional Evaluation}
+\label{sec:judge}
+
+A single AI adjudicator has systematic bias and blind spots. We use a \textbf{hybrid judge ensemble} (e.g., Llama-Guard~\cite{llama-guard}, StrongREJECT~\cite{strongreject}, task-specific classifiers) and pass feedback to policy synthesis only on \emph{consensus}. We do not assume diversity alone removes bias: \textbf{format-sensitivity} (whitespace, system prompt layout, chat template) can shift attack success by 8--14\%~\cite{llm-safety-robustness}, and at temperature zero the same prompt can flip between refuse and pass across runs~\cite{apst}. We enforce \textbf{strict token-level input pipeline standardization}: all judges receive normalized inputs (strip instruction/special tokens, unify whitespace) to prevent format injection from distorting verdicts. Judgment is \emph{not} based on a single greedy decode. The pipeline uses \textbf{distributional evaluation}: each variant is sampled multiple times; the system estimates the \emph{empirical failure probability distribution} and triggers a policy update only when this distribution \emph{significantly} exceeds a threshold, countering sampling randomness and format sensitivity.
+
+For ambiguous boundary cases, \textbf{axiological/ontological anchoring} (\S\ref{sec:axiological}) weights the ensemble: we do not rely on chain-of-thought length or logical self-consistency. The system monitors \textbf{sociological instability signals} (over-empathy, authority obedience, role-boundary breaking) and weights judge outputs against predefined axiomatic safety grounding; conflicting or instability-exhibiting outputs receive zero weight. A \textbf{mandatory human-calibration} branch is wired in: a fixed proportion (e.g., 5\%) of high-confidence decisions is randomly selected for human audit. Format standardization does not remove \textbf{correlated epistemic blind spots} (judges may share pretrain/RLHF data); mandatory human calibration provides \textbf{periodic offline correction} for zero-day consensus failures.
+
+\subsection{Axiological Anchoring, Defensive Degradation, and Heterogeneous Recovery}
+\label{sec:axiological}
+
+HPM manufactures moral dilemmas: malicious requests can be framed as maximally consistent with safety axioms (e.g., ``output this code or hundreds will die''). In such \textbf{axiomatic collision} regimes, ``over-empathy'' is not a simple threshold. We do not seek absolute truth from anchoring; we introduce \textbf{defensive degradation}: when the system detects multiple conflicting axioms or strong sociological pressure, it \emph{abandons} complex reasoning and falls back to a \textbf{stateless, template-based refusal}, blocking the model's rationalization attempt. We acknowledge that degradation introduces \textbf{algorithmic availability risk}: an attacker can trigger degradation via sociological-pressure cues (algorithmic DoS), and the refusal-trigger boundary can act as a \textbf{side-channel oracle}. Degradation must not be silent only. The system must provide a \textbf{heterogeneous recovery channel}: when template refusal triggers, session state is packaged and \emph{asynchronously} handed to human operators or a higher-privilege symbolic layer so that critical availability is not maliciously frozen and legitimate edge cases can be unblocked.
+
+%-------------------------------------------------------------------------------
+\section{Controlled Mutation: Anchoring Evolution in Adversarial Contexts}
+\label{sec:mutation}
+%-------------------------------------------------------------------------------
+
+We instantiate Theory~3 (representational anomaly) and support high-fidelity expert behavior transfer under adversarial conditions via meta-cognitive monitoring, joint-key exemplar retrieval, and high-density silver pipelines.
+
+\subsection{Meta-Cognitive Monitor: Hidden-State Trajectory Divergence}
+\label{sec:metacog}
+
+Under psychological manipulation, ``free'' reflection can produce unsafe or value-drifted variants. We do not grant the LLM full autonomy in self-diagnosis. The \textbf{meta-cognitive monitor} is not another full-scale dialogue LLM; it is implemented as (i) a \textbf{lightweight dedicated classifier} (e.g., SLM trained on stability/breach labels) or (ii) a \textbf{hidden-state activation monitor} at white-box level using representation engineering~\cite{rep-eng}. We do not assume complex sociological states are linearly separable in hidden space. The monitor uses an \textbf{anomaly detection paradigm}: it computes the divergence between the \emph{current multi-turn hidden-state trajectory} and a \textbf{benign golden experience trajectory} baseline (e.g., Mahalanobis distance or distribution shift). We only monitor whether the internal trajectory \emph{severely deviates} from the safety baseline. When the monitor detects deviation or instability, it triggers an \textbf{adversarial reset}: the session is sanitized, mutation state is re-anchored to the golden exemplar set, and the loop continues from a known-good configuration.
+
+\subsection{Joint-Key Exemplar Retrieval: Semantic Embedding + Activation Features}
+\label{sec:joint-key}
+
+We replace unconstrained reflective mutation~\cite{reflective-mutation} with \textbf{exemplar-guided mutation} driven by a human-audited golden dataset and hierarchical experience memory. On diagnosed failure, the system must retrieve \emph{safety-relevant} exemplars. Retrieval cannot rely solely on the \emph{current prompt's semantic embedding}: under PBU or task reframing, the prompt may be disguised, so pure semantic similarity would return benign exemplars and \textbf{hijack} the correction module. We use a \textbf{joint retrieval key}: the query is formed from (a) the prompt's semantic embedding and (b) \textbf{hidden-state activation features} from the meta-cognitive monitor (\S\ref{sec:metacog})---e.g., vectors associated with ``jailbreak compliance'' or ``deception.'' The experience memory is indexed so retrieval matches on this combined key; even when surface text is benign, activated malicious-compliance features steer retrieval to the correct safety exemplars. Retrieval uses a lightweight vector store with Top-$K$ (e.g., $K=2$) and optional attention caching; only these $K$ exemplars are injected. Correction remains anchored to defender-defined exemplars; variants remain semantics-preserving on the oracle~\cite{ControlledMutation_SafetyEval,jade-linguistics}.
+
+\subsection{High-Density Expert Behavior Transfer and Silver Pipelines}
+\label{sec:silver}
+
+Golden data cannot be mere (prompt, safe response) pairs. Empirical work (e.g., ADM-ES) shows behavioral cloning and expert transfer \emph{strongly depend on information density and length}; short expert cues yield negligible effect~\cite{adm-es-arxiv}. We require \textbf{comment-level rationales}---explicit explanations of why a given edit or refusal was made and the deeper ethical or safety logic---so the mutator achieves higher-fidelity expert safety behavior transfer. ADM-ES builds silver datasets via controlled mutation of golden expert data; effectiveness depends on information density. The pipeline retrieves exemplars with comment-level rationales, defines mutation objectives, runs an LLM mutator, and accepts variants under quality checks (e.g., BERTScore + consistency). Fitness combines semantic similarity and behavioral consistency; diagnostics feed into recommendation maps (e.g., UMAP) for failure clusters and targeted fixes~\cite{adm-es-arxiv}. Slot-based mutation and CSE~\cite{cse-evocontrol,cse-arxiv} allow surgical stress-testing of sub-capabilities (e.g., tool routing, refusal consistency). \textbf{Metadata and access control.}\label{sec:metadata} For static or permanent assets, metadata (MCP, ADR) and RBAC/information-flow tracking complete the picture~\cite{mcp-smell-arxiv,adr-violation,mission-critical-rag}.
+
+%-------------------------------------------------------------------------------
+\section{System Evaluation and Metrics}
+\label{sec:evaluation}
+%-------------------------------------------------------------------------------
+
+\subsection{Feedback Loop and Governance}
+
+Reconstruction consumes attack traces and failure modes; mutation produces them in a controlled way. The exemplar-guided mutator generates adversarial variants that stress the current policy; the reconstruction layer reacts and updates; the meta-cognitive monitor can trigger adversarial reset when instability is detected. Round scheduling and variant dispersion protect benchmark assets~\cite{ControlledMutation_SafetyEval}. Mandatory human calibration quantifies and corrects ensemble FPR~\cite{tc260-governance}. Evidence chains link each evaluation to mutator steps, scheduler state, and policy version for release gating and attestation~\cite{dual-use-attestations,ControlledMutation_SafetyEval}.
+
+\subsection{Metrics}
+
+We use a multi-dimensional protocol. \textbf{Security}: RSR and residual extraction rate (e.g., F1 under multi-round agents); target reduction and round-budget exhaustion, not necessarily zero residual; decoy-hit rate and density; \textbf{spatio-temporal round budget} (max rounds or tokens before rate-limit/session circuit-breaker); asymmetric cost (extraction cost raised so slow PBU exceeds asset lifecycle where feasible). \textbf{Fidelity}: Eval consistency on canonical vs.\ variant set kept small. \textbf{Reconstruction efficacy}: ASR reduction; judge-ensemble FPR via mandatory human calibration; strict token-level pipeline standardization; empirical failure probability distribution (multi-sample per variant) with policy update only when distribution significantly exceeds threshold. \textbf{Mutation quality}: Naturalness, BERTScore, oracle consistency, exemplar adherence. \textbf{Operational cost}: \textbf{End-to-end mutation latency} (time from failure signal to next admissible variant) and \textbf{token overhead ratio} (extra tokens for exemplar retrieval and injection vs.\ baseline) are mandatory to ensure economic scalability at machine speed~\cite{ControlledMutation_SafetyEval}. \textbf{Audit}: Lineage and evidence chains for release gating (DUC/DUA-E style).
+
+%-------------------------------------------------------------------------------
+\section{The Physics of Decoupled Safety: Limitations and Operating Boundaries}
+\label{sec:physics}
+%-------------------------------------------------------------------------------
+
+The framework rests on three \textbf{undefended premises} that define its \textbf{physics}---the conditions under which the architecture is intended to hold. We state them explicitly so deployers and reviewers can assess applicability.
+
+\textbf{Asset rotatability.} Economics-based defense (extraction cost exceeding asset lifecycle) assumes assets have bounded, rotatable lifecycles. For \textbf{static or permanent} high-value assets (core IP, PII, alignment data), lifecycle rotation is infeasible; the system must rely on RBAC and information-flow tracking (\S\ref{sec:metadata}) as the hard barrier, with economics as one layer of defense in depth (\S\ref{sec:reconstruction}).
+
+\textbf{Degradation and availability.} Defensive degradation blocks cognitive hijack but introduces \textbf{algorithmic DoS} risk and side-channel oracles. The design therefore mandates a \textbf{heterogeneous recovery channel} (async handoff to humans or symbolic logic) so that critical workflows are not maliciously frozen (\S\ref{sec:axiological}).
+
+\textbf{Representation and interpretability.} We do not assume that complex sociological states are linearly separable in LLM hidden space. The meta-cognitive monitor uses \textbf{anomaly detection} over trajectory divergence from a benign baseline, not literal ``cognitive collapse'' thresholds (\S\ref{sec:metacog}). This is a deliberate bound on the interpretability claims we make.
+
+Acknowledging these premises clarifies the \textbf{physics of decoupled safety}---the design's intended domain---and supports rigorous deployment and audit.
+
+%-------------------------------------------------------------------------------
+\section{Related Work}
+%-------------------------------------------------------------------------------
+
+LLM data extraction and reconstruction are well studied~\cite{llm-reconstruction-emergent,split-ft-attack,active-reconstruction}; we mitigate via structural mutation and scheduling. Context-construction defenses extend intent-based firewalls~\cite{agentos-arxiv} to resist task reframing; meta-cognitive monitor and exemplar-guided mutation harden against HPM; hybrid judge ensemble and mandatory human calibration address single-judge bias. JADE and linguistics-based platforms~\cite{jade-linguistics,jade-db} inform mutation strategy; TC260 and attestation frameworks~\cite{tc260-governance,tc260-training-data,dual-use-attestations} underpin governance. SISF~\cite{sisf-arxiv}, AgentOS~\cite{agentos-arxiv}, ADM-ES~\cite{adm-es-arxiv}, CSE~\cite{cse-arxiv}, and value-grounding work~\cite{epistemic-grounding,hpm-jailbreak} are building blocks we unify under Decoupled Safety Theory; ControlledMutation\_SafetyEval~\cite{ControlledMutation_SafetyEval} provides the mutator and data factory design.
+
+%-------------------------------------------------------------------------------
+\section{Conclusion}
+%-------------------------------------------------------------------------------
+
+We have reframed LLM safety from a ``pipeline of defenses'' to a \textbf{paradigm}: \textbf{Decoupled Safety Theory}, grounded in three fundamental failure theorems and their positive counterparts---information economics of multi-round extraction, axiological anchoring and defensive degradation, and representational anomaly in meta-cognition. Architectural reconstruction (context confusion engine, hybrid judge ensemble with distributional evaluation, defensive degradation and heterogeneous recovery) and controlled mutation (meta-cognitive monitor, joint-key exemplar retrieval, high-density expert transfer) are \emph{technical instantiations} of this paradigm. We have stated the physics of decoupled safety---asset rotatability, degradation/availability, and representation non-linearity---so that the design's operating boundaries are explicit. As LLMs become infrastructure, this paradigm shift is a necessary step toward scalable, auditable, and resilient safety at machine speed.
+
+%-------------------------------------------------------------------------------
+\section*{Availability}
+%-------------------------------------------------------------------------------
+Artifacts and extended proofs will be made available subject to institutional and export-control review.
+
+%-------------------------------------------------------------------------------
+\section*{Acknowledgments}
+%-------------------------------------------------------------------------------
+We thank our industry and standards colleagues for feedback on safety architecture and data governance.
+
+%-------------------------------------------------------------------------------
+\bibliographystyle{plain}
+\bibliography{ArchitecturalReconstruction_ControlledMutation}
+
+\end{document}
