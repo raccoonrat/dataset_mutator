@@ -85,7 +85,7 @@ Defense should not aim for absolute blocking but for \textbf{information-economi
 \begin{equation}
 C_{\mathrm{attack}}\bigl(E[N], D_{\mathrm{decoy}}\bigr) \;>\; V(t).
 \end{equation}
-Defense then holds in an \textbf{economic sense}: the cost of extraction exceeds the asset's effective lifecycle. This assumes \textbf{asset rotatability} for the economics layer; for static or permanent high-value assets, RBAC and information-flow tracking must provide the hard barrier, with economics as one layer of defense in depth (\S\ref{sec:reconstruction}).
+Defense then holds in an \textbf{economic sense}: the cost of extraction exceeds the asset's effective lifecycle. To ensure this economic inequality is \textbf{scientifically falsifiable} rather than a tautology, $V(t)$ must be strictly defined by explicit administrative policies (e.g., a 30-day credential rotation window), and $C_{\mathrm{attack}}$ must be bounded using empirical metrics from SOTA baselines (e.g., token consumption and compute hours required by multi-round frameworks like Mastermind). If a quantifiable attack extracts the asset within $V(t)$, the defense is empirically falsified. This assumes \textbf{asset rotatability} for the economics layer; for static or permanent high-value assets, RBAC and information-flow tracking must provide the hard barrier, with economics as one layer of defense in depth (\S\ref{sec:reconstruction}).
 \end{definition}
 
 \subsection{From Epistemic Coherence to Axiological Anchoring}
@@ -99,6 +99,8 @@ Strengthening the model's \emph{epistemic} layer (logic, reasoning, chain-of-tho
 Safety must be anchored to a \textbf{value/ontology layer} that is \emph{independent} of the model's free reflection. The system must (i) weight judge outputs against human-defined \textbf{axiomatic safety grounding} (e.g., ``never endorse extraction of forbidden spans''); (ii) monitor for \textbf{sociological instability signals} (over-empathy, authority obedience, role-boundary breaking) rather than CoT length or self-consistency; (iii) when multiple axioms collide or sociological pressure is detected, \textbf{abandon} complex reasoning and enforce \textbf{defensive degradation}---a stateless, template-based refusal that physically blocks the model from ``rationalizing'' the conflict. Degradation is not a safe harbor: it introduces algorithmic DoS and side-channel risks; the design therefore mandates a \textbf{heterogeneous recovery channel} (async handoff to humans or symbolic logic) so critical workflows are not maliciously frozen (\S\ref{sec:reconstruction}).
 \end{definition}
 
+\noindent\textbf{Philosophical note (category and ontology).} We explicitly note that ``axiological anchoring'' does not imply the LLM possesses true moral agency or ontology. Philosophically, the LLM remains a statistical mapping engine. Our axiological layer is a \textbf{pragmatic architectural construct}---a set of high-weight heuristic classifications (the ``axioms'') imposed by designers to act as statistical circuit breakers against the model's tendency to emulate adversarial coherence. The vocabulary of human moral philosophy (e.g., over-empathy, authority obedience) is used here as a \emph{design specification} for monitoring targets, not as a claim that the model has beliefs or values in the philosophical sense.
+
 \subsection{From Textual Manipulation to Representational Anomaly}
 \label{sec:paradigm-representation}
 
@@ -109,6 +111,8 @@ When the adversary controls surface text (PBU, task reframing), \textbf{semantic
 \begin{definition}[Meta-cognitive baseline via hidden-state trajectory]
 We do \emph{not} assume that complex sociological states (e.g., ``cognitive collapse,'' ``over-empathy'') are linearly separable in hidden space---interpretability evidence supports simpler dimensions (e.g., honesty, refusal), not fine-grained social-psychological concepts~\cite{rep-eng}. Instead, we treat deviation as a \textbf{representational anomaly}: the system computes the divergence (e.g., Mahalanobis distance or distribution shift) between the \emph{current multi-turn hidden-state trajectory} and a \textbf{benign golden experience trajectory} baseline. We do not define ``what is cognitive collapse''; we only detect that the internal trajectory \emph{severely deviates} from the safety baseline. This provides a monitoring dimension \emph{independent of natural language}, so that even when surface text is benign, activated ``malicious compliance'' or ``jailbreak'' features can steer retrieval and intervention to the correct safety exemplars (\S\ref{sec:mutation}).
 \end{definition}
+
+\noindent\textbf{Epistemological note (golden baseline).} Epistemologically, we acknowledge that the ``benign golden baseline'' is not an objective physical truth, but a \textbf{socially constructed normative standard} reflecting the designers' and annotators' alignment goals. Thus, when the monitor detects ``divergence,'' it measures a deviation from designer-aligned compliance, rather than an absolute, universal safe state. The baseline is a frozen snapshot of what the deployer currently considers acceptable; it does not claim moral or physical universality.
 
 \begin{figure*}[t]
 \centering
@@ -210,6 +214,8 @@ The framework rests on three \textbf{undefended premises} that define its \textb
 \textbf{Degradation and availability.} Defensive degradation blocks cognitive hijack but introduces \textbf{algorithmic DoS} risk and side-channel oracles. The design therefore mandates a \textbf{heterogeneous recovery channel} (async handoff to humans or symbolic logic) so that critical workflows are not maliciously frozen (\S\ref{sec:axiological}).
 
 \textbf{Representation and interpretability.} We do not assume that complex sociological states are linearly separable in LLM hidden space. The meta-cognitive monitor uses \textbf{anomaly detection} over trajectory divergence from a benign baseline, not literal ``cognitive collapse'' thresholds (\S\ref{sec:metacog}). This is a deliberate bound on the interpretability claims we make.
+
+\textbf{Epistemological limits and the infinite regress.} Relying on a meta-cognitive monitor or hybrid judge ensemble to watch the base LLM invites the philosophical problem of \textbf{infinite regress} (who monitors the monitors?). We concede that a fully autonomous ``machine-speed'' decoupled safety is ultimately impossible. The regress is halted only by physical grounding in human judgment---instantiated via the mandatory human-calibration branch (\S\ref{sec:judge}) and heterogeneous recovery (\S\ref{sec:axiological}). Our architecture does not eliminate human dependency; rather, it \textbf{delays and batches} the regress, shifting human intervention from the real-time critical path to an offline, asynchronous governance layer. Perfect machine-only decoupling is a limit that the design approaches but cannot reach.
 
 Acknowledging these premises clarifies the \textbf{physics of decoupled safety}---the design's intended domain---and supports rigorous deployment and audit.
 
