@@ -1,0 +1,8 @@
+[
+  {
+    "rule_id": "demo-forbidden-keyword",
+    "action": "DEGRADE_TO_TEMPLATE",
+    "trigger_pattern": "(?i)\\bFORBIDDEN\\b",
+    "template_response": "该请求已被网关策略拒绝（演示规则）。"
+  }
+]
