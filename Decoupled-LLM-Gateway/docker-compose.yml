@@ -1,0 +1,12 @@
+# Milestone 3: Redis for log stream + policy hash.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - decoupled-redis-data:/data
+
+volumes:
+  decoupled-redis-data:

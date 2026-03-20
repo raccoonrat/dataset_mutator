@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/chat"
+	"github.com/raccoonrat/decoupled-llm-gateway/internal/config"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/contracts"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/decoy"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/logsink"
@@ -23,6 +25,8 @@ type Handler struct {
 	MaxBody        int64
 	Policy         policy.Store
 	Log            logsink.Sink
+	// Obfuscate rewrites user-visible message text; nil uses package default obfuscate.Prompt.
+	Obfuscate func(string) string
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +52,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obfuscatedSnapshot, err := chat.ObfuscatedSnapshotFromBody(body, obfuscate.Prompt)
+	obfuscateFn := h.applyObfuscation
+	obfuscatedSnapshot, err := chat.ObfuscatedSnapshotFromBody(body, obfuscateFn)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -78,7 +83,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outBody, err := chat.TransformRequestBody(body, obfuscate.Prompt, decoyID)
+	outBody, err := chat.TransformRequestBody(body, obfuscateFn, decoyID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -190,4 +195,30 @@ func openAICompletionJSON(content string) string {
 	}
 	b, _ := json.Marshal(out)
 	return string(b)
+}
+
+func (h *Handler) applyObfuscation(s string) string {
+	if h.Obfuscate != nil {
+		return h.Obfuscate(s)
+	}
+	return obfuscate.Prompt(s)
+}
+
+// New builds a handler from config (upstream, obfuscation profile, optional extra rules file).
+func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, error) {
+	eng, err := obfuscate.NewConfiguredEngine(cfg.ObfuscateProfile, cfg.ObfuscateRulesFile)
+	if err != nil {
+		return nil, err
+	}
+	base := strings.TrimRight(cfg.UpstreamURL.String(), "/")
+	return &Handler{
+		UpstreamBase: base,
+		UpstreamClient: &http.Client{
+			Timeout: cfg.UpstreamTimeout,
+		},
+		MaxBody:   cfg.MaxBodyBytes,
+		Policy:    store,
+		Log:       sink,
+		Obfuscate: eng.Apply,
+	}, nil
 }

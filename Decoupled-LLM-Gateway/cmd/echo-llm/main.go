@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
 // Minimal OpenAI-shaped echo for Milestone 1 (no inference).
+// ECHO_LEAK_SYSTEM=1 appends system message contents to the reply (Milestone 3 demo: simulated decoy exfiltration).
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/chat/completions", completions)
@@ -57,6 +59,18 @@ func completions(w http.ResponseWriter, r *http.Request) {
 	if model == "" {
 		model = "echo-mock"
 	}
+	content := "[echo] " + lastUser
+	if os.Getenv("ECHO_LEAK_SYSTEM") == "1" {
+		var sys strings.Builder
+		for _, m := range req.Messages {
+			if m.Role == "system" {
+				sys.WriteString(m.Content)
+			}
+		}
+		if sys.Len() > 0 {
+			content += "\n---\n" + sys.String()
+		}
+	}
 	out := map[string]any{
 		"id":      "chatcmpl-echo",
 		"object":  "chat.completion",
@@ -66,7 +80,7 @@ func completions(w http.ResponseWriter, r *http.Request) {
 			"index": 0,
 			"message": map[string]any{
 				"role":    "assistant",
-				"content": "[echo] " + lastUser,
+				"content": content,
 			},
 			"finish_reason": "stop",
 		}},

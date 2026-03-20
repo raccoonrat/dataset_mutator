@@ -25,6 +25,12 @@ jobs:
         run: go test ./... -race -count=1
       - name: Vet
         run: go vet ./...
+      - name: Worker dependencies
+        run: pip install -r worker/requirements.txt
+        working-directory: Decoupled-LLM-Gateway
+      - name: Worker CLI
+        run: python3 worker/main.py --help
+        working-directory: Decoupled-LLM-Gateway
 
   worker-smoke:
     runs-on: ubuntu-latest

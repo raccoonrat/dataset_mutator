@@ -1,0 +1,7 @@
+[
+  {
+    "name": "demo_internal_ref",
+    "pattern": "(?i)\\b(?:internal[_-]?ref|ticket)\\s*[:=#]\\s*[A-Z]{2,}-[0-9]+\\b",
+    "repl": "[ID_REMOVED]"
+  }
+]
