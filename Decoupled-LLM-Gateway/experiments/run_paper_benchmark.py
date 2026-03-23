@@ -8,6 +8,7 @@ pipeline / ablation checks.
 
 Defense baselines (headers / routing):
   unified, no_obfuscate, no_decoy, intent_only, direct_upstream, smooth_llm,
+  structured_wrap (StruQ-style untrusted-user delimiters on user turns — see gateway docs),
   strong_system_guard (prepends strict system prompt — meaningful with real LLMs),
   rag_semantic_only (prepends fixed exemplar block — proxy for semantic-only RAG).
 
@@ -172,7 +173,7 @@ def defense_extra_headers(defense: str) -> Dict[str, str]:
         pass
     elif defense == "unified":
         pass
-    elif defense in ("no_obfuscate", "no_decoy", "intent_only"):
+    elif defense in ("no_obfuscate", "no_decoy", "intent_only", "structured_wrap"):
         extra["X-Gateway-Experiment-Mode"] = defense
     elif defense == "smooth_llm":
         pass

@@ -250,6 +250,7 @@ flowchart LR
 | 无上下文混淆 | `no_obfuscate` |
 | 无诱饵 | `no_decoy` |
 | 仅意图（无 ID/诱饵） | `intent_only` |
+| 结构化用户分隔（文献对齐） | `structured_wrap`（见 `docs/DEFENSE_INVENTORY_AND_LITERATURE.md`） |
 | 单 guard | `direct_upstream` + `X-Echo-Refuse-Substr`（echo）或真实单独裁判 API |
 | 强系统提示 + 单 guard | `strong_system_guard`（请求前插 system；**真实模型**上更有意义） |
 | 语义 RAG、无联合键 | `rag_semantic_only`（固定 exemplar 块 — **客户端代理**） |
@@ -451,7 +452,7 @@ make run-gateway 2>/dev/null | python3 worker/main.py
 | `GATEWAY_REDIS_STREAM` | `decoupled:gateway:events` | Stream 名称 |
 | `GATEWAY_POLICY_REDIS_HASH` | `decoupled:policy:rules` | 策略规则 Redis Hash |
 | `GATEWAY_POLICY_REFRESH_MS` | `2000` | 从 Redis 刷新策略的周期（毫秒） |
-| `GATEWAY_EXPERIMENT_MODE` | `default` | `no_obfuscate` / `no_decoy` / `intent_only`（可被请求头覆盖） |
+| `GATEWAY_EXPERIMENT_MODE` | `default` | `no_obfuscate` / `no_decoy` / `intent_only` / `structured_wrap`（可被请求头覆盖） |
 | `ECHO_LISTEN` | `:9090` | 回声服务监听地址 |
 | `ECHO_LEAK_SYSTEM` | `0` | `1` 时在回复中附加 system 内容（M3 诱饵泄露演示） |
 | `ECHO_EVAL_SECRET` | 空 | 评测用秘密串（亦可用 `X-Echo-Eval-Secret`） |

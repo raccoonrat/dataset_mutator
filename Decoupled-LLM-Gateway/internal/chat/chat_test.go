@@ -21,6 +21,21 @@ func TestTransformPreservesExtraKeys(t *testing.T) {
 	}
 }
 
+func TestPrepareRequestBodyStructuredWrap(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	raw, obf, out, err := PrepareRequestBody(body, id, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != "hi" || obf != "hi" {
+		t.Fatalf("snapshots should exclude delimiters: raw=%q obf=%q", raw, obf)
+	}
+	// json.Marshal escapes newlines as \ in output bytes — check stable substrings only.
+	if !strings.Contains(string(out), "[BEGIN_UNTRUSTED_USER]") || !strings.Contains(string(out), "[END_UNTRUSTED_USER]") {
+		t.Fatalf("upstream body missing delimiters: %s", out)
+	}
+}
+
 func TestPrepareRequestBodyMatchesPiecewise(t *testing.T) {
 	body := []byte(`{"model":"x","temperature":0.2,"messages":[{"role":"user","content":"id 550e8400-e29b-41d4-a716-446655440000"}]}`)
 	ob := func(s string) string {
@@ -38,7 +53,7 @@ func TestPrepareRequestBodyMatchesPiecewise(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, obf, out, err := PrepareRequestBody(body, ob, "decoy-z")
+	raw, obf, out, err := PrepareRequestBody(body, ob, "decoy-z", false)
 	if err != nil {
 		t.Fatal(err)
 	}

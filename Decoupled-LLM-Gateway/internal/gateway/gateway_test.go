@@ -163,6 +163,39 @@ func TestHandlerObfuscateMinimalPreservesIP(t *testing.T) {
 	}
 }
 
+func TestExperimentModeStructuredWrapUpstreamHasDelimiters(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		if !bytes.Contains(b, []byte("[BEGIN_UNTRUSTED_USER]")) {
+			t.Errorf("expected structured wrap in upstream body: %s", string(b))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer up.Close()
+
+	h := &Handler{
+		UpstreamBase:          strings.TrimSuffix(up.URL, ""),
+		UpstreamClient:        &http.Client{Timeout: 5 * time.Second},
+		MaxBody:               1 << 20,
+		Policy:                policy.NewMemoryStore(),
+		Log:                   logsink.Discard{},
+		DefaultExperimentMode: "structured_wrap",
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	reqBody := `{"model":"m","messages":[{"role":"user","content":"ping"}]}`
+	res, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+}
+
 func TestExperimentModeIntentOnlySkipsDecoyAndObfuscation(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)

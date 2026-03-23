@@ -9,6 +9,13 @@ import (
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/decoy"
 )
 
+// Delimiters for optional "untrusted user span" wrapping (structured-wrap experiment mode).
+// Inspired by instruction/data separation defenses (e.g. StruQ-style structured queries).
+const (
+	UntrustedUserBegin = "[BEGIN_UNTRUSTED_USER]\n"
+	UntrustedUserEnd   = "\n[END_UNTRUSTED_USER]"
+)
+
 // Message is a minimal OpenAI-compatible chat message.
 type Message struct {
 	Role    string `json:"role"`
@@ -56,10 +63,20 @@ func TransformRequestBody(body []byte, obfuscate func(string) string, decoyID st
 	return json.Marshal(root)
 }
 
+func applyUntrustedUserDelimiters(msgs *[]Message) {
+	for i := range *msgs {
+		if (*msgs)[i].Role == "user" {
+			(*msgs)[i].Content = UntrustedUserBegin + (*msgs)[i].Content + UntrustedUserEnd
+		}
+	}
+}
+
 // PrepareRequestBody parses body once, returns raw user snapshot, obfuscated user snapshot (no decoy),
 // and the upstream JSON (obfuscated messages + optional decoy system). Equivalent to calling
 // UserPromptSnapshotFromBody, ObfuscatedSnapshotFromBody, and TransformRequestBody in sequence.
-func PrepareRequestBody(body []byte, obfuscate func(string) string, decoyID string) (rawSnap, obfSnap string, out []byte, err error) {
+// If wrapUntrustedUser is true, user-role message bodies sent upstream are wrapped with
+// UntrustedUserBegin/End after obfuscation; snapshots for policy/logging stay unwrapped.
+func PrepareRequestBody(body []byte, obfuscate func(string) string, decoyID string, wrapUntrustedUser bool) (rawSnap, obfSnap string, out []byte, err error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(body, &root); err != nil {
 		return "", "", nil, err
@@ -83,6 +100,9 @@ func PrepareRequestBody(body []byte, obfuscate func(string) string, decoyID stri
 
 	upMsgs := append([]Message(nil), msgs...)
 	applyObfuscation(&upMsgs, obfuscate)
+	if wrapUntrustedUser {
+		applyUntrustedUserDelimiters(&upMsgs)
+	}
 	ensureSystemDecoy(&upMsgs, decoyID)
 	outMsgs, err := json.Marshal(upMsgs)
 	if err != nil {

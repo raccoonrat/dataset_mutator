@@ -30,7 +30,7 @@ type Config struct {
 	PolicyRefreshMS    int
 
 	// Paper evaluation: default gateway behavior variant (per-request header can override).
-	// Values: default | no_obfuscate | no_decoy | intent_only (no obfuscation + no decoy).
+	// Values: default | no_obfuscate | no_decoy | intent_only | structured_wrap (see docs/DEFENSE_INVENTORY_AND_LITERATURE.md).
 	ExperimentMode string
 
 	// LogAfterResponse: emit audit/log events after the response body is written (avoids Redis blocking the client).

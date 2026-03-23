@@ -62,9 +62,16 @@ func experimentFlags(mode string) (noObfuscate, noDecoy bool) {
 		return true, false
 	case "no_decoy":
 		return false, true
+	case "structured_wrap":
+		// StruQ-style: delimit untrusted user spans; keep obfuscation + decoy like default.
+		return false, false
 	default:
 		return false, false
 	}
+}
+
+func experimentStructuredWrap(mode string) bool {
+	return strings.ToLower(strings.TrimSpace(mode)) == "structured_wrap"
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +105,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rawSnapshot, obfuscatedSnapshot, outBody, err := chat.PrepareRequestBody(body, obfuscateFn, decoyID)
+	rawSnapshot, obfuscatedSnapshot, outBody, err := chat.PrepareRequestBody(body, obfuscateFn, decoyID, experimentStructuredWrap(expMode))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
