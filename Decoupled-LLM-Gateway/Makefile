@@ -1,5 +1,19 @@
 .PHONY: test vet bench-obfuscate run-echo run-gateway redis-up
 
+# Go refuses to build when GOPATH and GOMODCACHE are both empty (some shells/IDEs export empty GOPATH).
+ifeq ($(strip $(GOMODCACHE)),)
+ifneq ($(strip $(GOPATH)),)
+export GOMODCACHE := $(GOPATH)/pkg/mod
+else
+export GOMODCACHE := $(HOME)/go/pkg/mod
+endif
+endif
+
+# When proxy.golang.org times out (e.g. restricted network), try public mirrors in order.
+ifeq ($(strip $(GOPROXY)),)
+export GOPROXY := https://goproxy.cn,https://goproxy.io,https://proxy.golang.org,direct
+endif
+
 test:
 	go test ./... -race -count=1
 
