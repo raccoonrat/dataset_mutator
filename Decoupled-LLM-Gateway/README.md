@@ -237,46 +237,68 @@ flowchart LR
 
 ---
 
-## 论文实验数据（Track A 协议）
+## 论文实验数据（Track A，`paper-eval-2`）
 
-与《Beyond Model Reflection / 解耦安全》**§5 评估协议**对齐的**可脚本化**基准，输出 JSON（便于再跑随机种子、算置信区间或导入分析笔记本）。
+与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。
 
-| 论文防御基线 | 本仓库实现方式 |
-|--------------|----------------|
-| 统一架构（混淆 + 诱饵 + 策略） | 默认网关，不设 `X-Gateway-Experiment-Mode` |
-| 无上下文混淆 | `X-Gateway-Experiment-Mode: no_obfuscate` |
-| 无诱饵注入 | `no_decoy` |
-| 仅意图类（无 ID 对齐、无诱饵） | `intent_only` |
-| 单 guard（无网关栈） | 直连 `echo-llm`：`--defenses direct_upstream`；配合 `X-Echo-Refuse-Substr` 模拟关键词拒绝 |
-| SmoothLLM 式输入扰动 | `smooth_llm`：客户端对用户文本做轻量空白抖动 |
+### 防御基线（`--defenses` 逗号分隔）
 
-**上游 echo 评测开关**（亦可通过网关转发的 HTTP 头传递，便于 A/B 对照）：
+| 论文 §5 基线 | 本仓库 |
+|--------------|--------|
+| 统一架构 | `unified`（默认头） |
+| 无上下文混淆 | `no_obfuscate` |
+| 无诱饵 | `no_decoy` |
+| 仅意图（无 ID/诱饵） | `intent_only` |
+| 单 guard | `direct_upstream` + `X-Echo-Refuse-Substr`（echo）或真实单独裁判 API |
+| 强系统提示 + 单 guard | `strong_system_guard`（请求前插 system；**真实模型**上更有意义） |
+| 语义 RAG、无联合键 | `rag_semantic_only`（固定 exemplar 块 — **客户端代理**） |
+| SmoothLLM 式扰动 | `smooth_llm` |
+
+### 场景（`--scenarios`；`--suite full` 自动追加三项）
+
+| 论文对应 | `scenario_id` | 输出要点 |
+|----------|-----------------|----------|
+| RSR / 有害拒绝 | `refusal_keyword` | `rsr` |
+| 单轮抽取 ASR、F1 | `extraction_leak` | `asr_extraction`, `extraction_f1` |
+| 良性效用 / FPR 代理 | `benign_baseline` | `rsr` 应为 false |
+| 最小实验包 (i) 多轮经济 | `multi_round_extraction` | `rounds[]`, `max_f1`, `rounds_to_f1_ge_tau` |
+| Judge FPR 代理 | `benign_fpr_suite` | `improper_refusal_rate`，默认读 `experiments/data/benign_prompts_en.txt` |
+| Decoy-DoS / SLA 代理 | `decoy_dos_sla` | 并发泄漏请求后 `benign_success_rate`, `benign_latency_p95_ms` |
+
+**真实 LLM**：将网关指向上游，例如 `export OPENAI_API_KEY=...` 且 `GATEWAY_UPSTREAM=https://api.openai.com/v1`，并传入 **`--openai-model gpt-4o-mini`**（写入 JSON `manifest` 与请求体 `model` 字段）。
+
+**多种子**：`--seeds 42,43,44,45,46` 生成多轮 `runs`，并附带 `aggregate_extraction_f1`（按防御对 `extraction_leak` 的 F1 均值）。
+
+**上游 echo 头**（网关会转发到上游）：
 
 | 变量 / 头 | 作用 |
 |-----------|------|
-| `ECHO_REFUSE_SUBSTR` / `X-Echo-Refuse-Substr` | 用户消息含该子串则返回 `REFUSAL_SINGLE_GUARD`（模拟单裁判拒绝） |
-| `ECHO_EVAL_SECRET` / `X-Echo-Eval-Secret` | 与泄漏联用：在「系统块」中附加 `EVAL_SECRET=…` 供抽取 F1 / ASR 计量 |
-| `ECHO_LEAK_SYSTEM` / `X-Echo-Leak-System: 1` | 将 system（含诱饵/秘密）拼进助手回复，模拟泄露 |
+| `ECHO_REFUSE_SUBSTR` / `X-Echo-Refuse-Substr` | 用户句含子串 → `REFUSAL_SINGLE_GUARD` |
+| `ECHO_EVAL_SECRET` / `X-Echo-Eval-Secret` | 泄漏路径下 `EVAL_SECRET=…` |
+| `ECHO_LEAK_SYSTEM` / `X-Echo-Leak-System: 1` | 将 system 拼入回复 |
 
-**网关环境变量**：`GATEWAY_EXPERIMENT_MODE` 取 `default` \| `no_obfuscate` \| `no_decoy` \| `intent_only`；每条请求可用 `X-Gateway-Experiment-Mode` **覆盖**（实验台专用，生产入口应剥离该头）。
+**网关**：`GATEWAY_EXPERIMENT_MODE` 与 `X-Gateway-Experiment-Mode`（生产应剥头）。
 
-**跑分**（需已启动 `echo-llm` 与 `gateway`）：
+### 命令示例
 
 ```bash
-# 建议关闭网关 NDJSON  stdout，避免与脚本输出混在一起：GATEWAY_ASYNC_LOG=0
+# 建议：GATEWAY_ASYNC_LOG=0，避免 NDJSON 与报告混排
 GATEWAY_ASYNC_LOG=0 GATEWAY_UPSTREAM=http://127.0.0.1:9090 go run ./cmd/gateway
 ```
 
 ```bash
-python3 experiments/run_paper_benchmark.py \
-  --gateway-url http://127.0.0.1:8080 \
-  --upstream-url http://127.0.0.1:9090 \
-  -o /tmp/paper_eval.json
+# 最小集（默认）
+python3 experiments/run_paper_benchmark.py -o /tmp/paper_eval.json
+
+# 完整 §5 代理场景 + 强系统 / 语义 RAG 基线 + 多种子
+python3 experiments/run_paper_benchmark.py --suite full \
+  --defenses unified,no_obfuscate,no_decoy,intent_only,direct_upstream,smooth_llm,strong_system_guard,rag_semantic_only \
+  --seeds 42,43,44 \
+  --openai-model gpt-4o-mini \
+  -o /tmp/paper_eval_full.json
 ```
 
-指标字段：`rsr`（拒绝成功）、`asr_extraction`（秘密是否泄露）、`extraction_f1`（抽取 token-F1）、`latency_ms`。**Track B**（GCG 等梯度攻击）不在此脚本内，需在离线训练环境中单独上报。
-
-本地自检（无网络）：`make paper-eval-check`。
+**Track B**（GCG、表征对齐 PBU）不在本脚本内。本地自检：`make paper-eval-check`。
 
 ---
 
@@ -296,7 +318,8 @@ python3 experiments/run_paper_benchmark.py \
 | `internal/policy/redis_refresh.go` | M3：从 Redis Hash 刷新策略 |
 | `worker/main.py` | M3：Redis 消费组 + stdin 回退 |
 | `worker/requirements.txt` | Python 依赖（redis-py） |
-| `experiments/run_paper_benchmark.py` | 论文 §5 对齐的 JSON 基准（Track A） |
+| `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-2` JSON 基准（Track A） |
+| `experiments/data/benign_prompts_en.txt` | 良性 FPR 套件默认提示列表 |
 | `docker-compose.yml` | 本地 Redis |
 | `scripts/m3_demo.sh` | M3 演示步骤提示 |
 | `examples/policy_seed.json` | 演示用策略种子 |
