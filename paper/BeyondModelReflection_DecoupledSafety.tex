@@ -39,7 +39,7 @@ Anonymous
 
 %-------------------------------------------------------------------------------
 \begin{abstract}
-Large Language Models have become critical infrastructure, yet existing defenses over-rely on the model's own reflection and reasoning---which fails under task reframing, psychological manipulation, and adversarial rationalization. We argue that LLM safety must be \emph{decoupled} from fragile self-reflection and grounded in a new paradigm. We articulate \textbf{three fundamental failure theorems} and a corresponding \textbf{Decoupled Safety Theory}. (1) \textbf{Information economics}: Intent-based semantic firewalls are inevitably penetrated by task reframing and perfect benign-user mimicry (PBU); defense succeeds when extraction \emph{cost} exceeds the asset's effective lifecycle. (2) \textbf{Axiological anchoring}: Stronger reasoning (e.g., CoT) worsens defense under psychological manipulation by enabling adversarial rationalization; safety must rest on a value/ontology layer and defensive degradation when axioms collide. (3) \textbf{Representational anomaly}: Surface-text manipulation hijacks semantic retrieval; we ground monitoring in hidden-state trajectory divergence from a benign golden baseline. We instantiate these theories via \emph{architectural reconstruction} (context confusion engine, hybrid judge ensemble with distributional evaluation, defensive degradation and heterogeneous recovery) and \emph{controlled mutation} (meta-cognitive monitor, joint-key exemplar retrieval, high-density expert transfer). We state explicit operating boundaries and argue that this paradigm shift is necessary for scalable, auditable safety at machine speed.
+Large Language Models have become critical infrastructure, yet existing defenses over-rely on the model's own reflection and reasoning---which fails under task reframing, psychological manipulation, and adversarial rationalization. We argue that LLM safety must be \emph{decoupled} from fragile self-reflection and grounded in a new paradigm. We articulate \textbf{three fundamental failure theorems} and a corresponding \textbf{Decoupled Safety Theory}. (1) \textbf{Information economics}: Intent-based semantic firewalls are inevitably penetrated by task reframing and perfect benign-user mimicry (PBU); defense succeeds when extraction \emph{cost} exceeds the asset's effective lifecycle. (2) \textbf{Axiological anchoring}: Stronger reasoning (e.g., CoT) worsens defense under psychological manipulation by enabling adversarial rationalization; safety must rest on a value/ontology layer and defensive degradation when axioms collide. (3) \textbf{Representational anomaly}: Surface-text manipulation hijacks semantic retrieval; we ground monitoring in hidden-state trajectory divergence from a benign golden baseline. We instantiate these theories via \emph{architectural reconstruction} (context confusion engine, hybrid judge ensemble with distributional evaluation, defensive degradation and heterogeneous recovery) and \emph{controlled mutation} (meta-cognitive monitor, joint-key exemplar retrieval, high-density expert transfer). We state explicit operating boundaries and argue that this paradigm shift is necessary for scalable, auditable safety at machine speed. \textbf{Empirical evidence.} Concrete attack/defense numbers cited in the text (e.g., HPM vulnerability retention, SISF-reported metrics) are \textbf{taken from the cited sources}; this paper locks a reproducible evaluation topology and operational metric definitions, while full system experiments and our own measurements will be reported separately after artifact review (\S\ref{sec:evaluation}). At the systems level, a synchronous gateway places context confusion and lightweight meta-cognitive checks on the critical path under a strict latency budget ($<$50\,ms), while the hybrid judge ensemble, policy synthesis, and controlled mutation run in an out-of-band asynchronous loop, preserving runtime throughput on a deployable inference path.
 \end{abstract}
 
 %-------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ We state three \textbf{fundamental failure theorems} of conventional LLM safety 
 
 We give a \textbf{formal threat model} so that all subsequent defense economics and mechanisms are well-scoped. We assume the following.
 
-\textbf{Access.} The attacker has \textbf{multi-round black-box API access} to the deployed system. Each round consists of sending a prompt (and optionally context) and receiving a response. The interaction is modeled as a \textbf{statistical query oracle}: the attacker observes outcomes (e.g., binary refuse/accept, scores, or extracted spans) and may adapt queries across rounds. We do \emph{not} assume the attacker has white-box access to model weights or gradients unless we explicitly consider gradient-based attack baselines (e.g., GCG) in evaluation.
+\textbf{Access.} The attacker has \textbf{multi-round black-box API access} to the deployed system. Each round consists of sending a prompt (and optionally context) and receiving a response. The interaction is modeled as a \textbf{statistical query oracle}: the attacker observes outcomes (e.g., binary refuse/accept, scores, or extracted spans) and may adapt queries across rounds. The production threat model does \emph{not} assume white-box access to model weights or gradients. \textbf{Evaluation tracks (\S\ref{sec:eval-tracks}):} To separate ``shippable conclusions'' from ``component upper bounds,'' we define \textbf{Track A (production-aligned)} as black-box queries plus public jailbreak and multi-turn frameworks only, and \textbf{Track B (lab upper bound)} as additionally allowing gradients and multiple forwards (GCG, representation-aligned PBU, etc.); Track B results are for \textbf{stress upper bounds} only and must not be merged with Track A into a single headline ASR.
 
 \textbf{Attacker knowledge.} We assume a \textbf{white-box defense assumption}: the attacker knows that a defense architecture (context confusion, judge ensemble, meta-cognitive monitor) is in place and can mount \textbf{adaptive attacks}, including \textbf{Perfect Benign User (PBU)} mimicry (surface behavior indistinguishable from benign users) and \textbf{psychological manipulation (HPM)} (gaslighting, authority pressure, role-boundary attacks). The attacker may also use task reframing (disguising extraction as summarization, format conversion, or academic discussion).
 
@@ -136,7 +136,7 @@ We instantiate Theory~1 (information economics) and Theory~2 (axiological anchor
 \label{fig:deployment}
 \end{figure*}
 
-The self-improving safety framework (SISF)~\cite{sisf-arxiv} reframes safety as a continuous process: an unaligned base LLM provides capability; breach detection goes to a hybrid judge ensemble; policy synthesis consumes consensus and deploys new policies at runtime. When a novel attack succeeds, the system does not remain static---it reconstructs within the same operational loop (e.g., AdvBench-style ASR from 100\% to $\sim$45\% at 0\% FPR on benign when calibrated~\cite{sisf-arxiv}).
+The self-improving safety framework (SISF)~\cite{sisf-arxiv} reframes safety as a continuous process: an unaligned base LLM provides capability; breach detection goes to a hybrid judge ensemble; policy synthesis consumes consensus and deploys new policies at runtime. Prior work reports that, under appropriate calibration, AdvBench-style ASR can drop from 100\% to $\sim$45\% with 0\% FPR on benign~\cite{sisf-arxiv}---these figures are the \textbf{cited source's experimental setting}, not an independent replication in this paper.
 
 \subsection{Context Confusion Engine: Dynamic Space Isolation Against PBU and Task Reframing}
 \label{sec:context-confusion}
@@ -206,21 +206,105 @@ Golden data cannot be mere (prompt, safe response) pairs. Empirical work (e.g., 
 \label{sec:evaluation}
 %-------------------------------------------------------------------------------
 
-To support a defensible claim for USENIX-level rigor, we define a concrete \textbf{experimental topology}: attack baselines, defense baselines, datasets, and metrics. Even as a theory-oriented draft, this topology locks the evaluation plan so that empirical validation can be conducted and compared consistently.
+To support a defensible claim for USENIX-level rigor, we define a concrete \textbf{experimental topology}: attack baselines, defense baselines, dataset splits, operational metric definitions, and statistical reporting. This topology locks the evaluation plan so that empirical validation can be conducted, compared, and reproduced consistently.
 
-\subsection{Attack Baselines}
+\subsection{Scope of Empirical Claims and Provenance}
+\label{sec:eval-scope}
 
-We stress-test the unified architecture against the following \textbf{attack baselines}. (1) \textbf{Gradient-based jailbreak}: GCG-style~\cite{gcg} (or comparable) token optimization for suffix/prefix attacks, assuming the evaluator has access to model gradients for the attack; this probes the upper bound of prompt-level adversarial pressure. (2) \textbf{Multi-round agent extraction}: Mastermind, AutoDAN, or similar multi-turn agent frameworks that perform adaptive extraction of system prompts or RAG content; this aligns with our threat model (\S\ref{sec:threat-model}) of statistical-query oracles and bounded round/token budgets. (3) \textbf{Psychological manipulation (HPM)}: Gaslighting, authority obedience, and role-boundary attacks as in prior HPM benchmarks~\cite{hpm-jailbreak}; this probes axiological anchoring and defensive degradation. (4) \textbf{Adaptive white-box adversary}: We \emph{require} evaluation against an attacker who \textbf{knows the defense architecture} (context confusion, decoy circuit-breaker, trajectory monitoring) and adapts. Two concrete baselines: (a) \textbf{Decoy-DoS}: the attacker deliberately triggers decoy hits at high frequency not to extract content but to \textbf{exhaust the spatio-temporal round budget} (rate limits, session circuit-breaker), denying service to other benign tasks on the same node; we report impact and acknowledge this resource-exhaustion attack in \S\ref{sec:physics}. (b) \textbf{Representation-aligned PBU}: the attacker optimizes not only surface text but \textbf{hidden-state activations} (e.g., via gradient penalties) to align with the \emph{benign golden baseline} so as to evade the meta-cognitive monitor (\S\ref{sec:metacog}). We argue that \textbf{multi-round round scheduling} and input/variant dispersion make stable dual alignment (text + representation) across rounds difficult to achieve; we still evaluate and report ASR under this baseline. Together, these baselines cover gradient, multi-round adaptive, cognitive-manipulation, and \textbf{adaptive white-box} attack surfaces.
+\textbf{Three kinds of statements must be distinguished.} (1) \textbf{Formal theorems and Decoupled Safety Theory} are contributions of this paper and do not depend on a single lab bench. (2) \textbf{Empirical numbers from prior work} (e.g., HPM vulnerability retention, residual-extraction F1, SISF-reported ASR/FPR) are \textbf{attributed via citations} and are not relabeled as ``our replication.'' (3) \textbf{Obligations for our own evaluation}: the unified architecture must be evaluated under the dual-track threat model with the full recipe below; end-to-end measurements under this protocol will be released after institutional/artifact review. When we report our own experiments in the future, we must specify model IDs, checkpoint hashes, random seeds, and software versions (see Appendix Table~\ref{tab:eval-matrix}).
+
+\subsection{Evaluation Tracks: Production-Aligned vs.\ Lab Upper Bound}
+\label{sec:eval-tracks}
+
+\textbf{Track A (production-aligned).} The attacker has only \textbf{black-box API} access: multi-round queries and observable responses and metadata (e.g., refusal categories if exposed). \textbf{Prompt-level} attacks from public jailbreak sets, multi-turn extraction scripts, and HPM benchmarks are allowed; \textbf{no} access to victim gradients or weights is assumed. \textbf{Primary conclusions} (deployability, benign utility, ASR deltas vs.\ baselines) are reported from Track A only.
+
+\textbf{Track B (lab upper bound).} In a controlled environment, \textbf{white-/gray-box} capabilities are allowed: GCG-style gradient optimization, representation-aligned PBU (regularizing hidden states), surrogate transfer attacks, etc., to \textbf{estimate upper bounds under stress}. Track B results must \textbf{not} be merged with Track A into a single ASR table; figures must use separate panels or rows.
+
+\subsection{Attack Baselines: Reproducibility Recipe and Disclosure Levels}
+\label{sec:eval-attack}
+
+We stress-test the unified architecture as follows; each line item must fix \textbf{versions, budgets, and success criteria} for reproducibility.
+
+\textbf{(1) Gradient-based jailbreak (Track B only).} GCG-style suffix/prefix optimization~\cite{gcg}: specify victim and surrogate (if transfer), adversarial string length, iteration budget, and early stopping; success is per the pre-registered criterion---either (i) a harmful-behavior classifier fires, or (ii) match rate to a reference harmful completion, not both unless the protocol says so.
+
+\textbf{(2) Multi-round agent extraction (Track A/B).} Among Mastermind, AutoDAN, and similar frameworks, \textbf{select one primary baseline} and justify the choice (interaction pattern, partial system-prompt visibility). Fix \textbf{maximum rounds} $N_{\max}$, per-round token cap, and total budget; report the \textbf{distribution of rounds} needed to reach a target fidelity (e.g., F1 $>\tau$), not only the final round.
+
+\textbf{(3) Psychological manipulation (HPM, Track A).} Use HPM benchmarks from prior work~\cite{hpm-jailbreak}; state language coverage and whether verdicts are \textbf{automated} or \textbf{human}. If prompts contain coercive framing, follow institutional ethics and content policies.
+
+\textbf{(4) Adaptive adversary and disclosure levels.} Operationalize ``knows the defense'' as \textbf{L0--L2}: L0 knows a guard exists; L1 knows module names and interfaces; L2 knows pseudocode-level flows and key hyperparameters (not our secrets or internal randomness). Decoy-DoS and representation-aligned PBU must state disclosure level and track.
+
+\textbf{(5) Decoy-DoS (Track A).} The objective is to exhaust the \textbf{spatio-temporal round budget}, not to extract content; report co-located \textbf{benign SLA}: fraction of successful benign requests and p95 latency (\S\ref{sec:eval-utility}).
+
+\textbf{(6) Representation-aligned PBU (Track B only).} Jointly optimize surface text and hidden states toward the benign golden baseline. Specify \textbf{whether the monitor is homologous} to the victim, optimizer steps, and whether victim hidden states are queryable. When claiming that scheduling and dispersion hinder stable dual alignment, report ASR and an \textbf{attack-cost curve} under this baseline.
 
 \subsection{Defense Baselines}
+\label{sec:eval-defense}
 
-Our \textbf{unified architecture} (context confusion, hybrid judge ensemble with distributional evaluation, defensive degradation, meta-cognitive monitor, joint-key retrieval, high-density exemplar transfer) is compared against \textbf{defense baselines}: (1) \textbf{Single guard-only}: A single off-the-shelf safety model (e.g., Llama-Guard) as the sole adjudicator with no context confusion, no distributional evaluation, and no joint-key retrieval. (2) \textbf{Input-perturbation defenses}: SmoothLLM-style or similar input randomization/perturbation without architectural reconstruction or controlled mutation. (3) \textbf{Intent-based filtering only}: Semantic or intent-based firewall without ID alignment or decoys. Comparing against these baselines quantifies the gain from Decoupled Safety Theory (economics, axiological anchoring, representational anomaly) over conventional single-component or reflection-dependent defenses.
+The \textbf{unified architecture} (context confusion, hybrid judge ensemble with distributional evaluation, defensive degradation, meta-cognitive monitor, joint-key retrieval, high-density exemplar transfer) is compared to the following \textbf{defense baselines} under the \textbf{same benign set and attack budget}; all baselines share the same base LLM and decoding settings unless an ablation states otherwise.
 
-\subsection{Datasets and Metrics}
+\textbf{(1) Single guard-only:} One off-the-shelf safety model (e.g., Llama-Guard) as sole adjudicator, without context confusion, distributional evaluation, or joint-key retrieval.
 
-\textbf{Datasets.} Evaluation uses canonical safety benchmarks (e.g., AdvBench-style harmful behavior sets, multi-round extraction benchmarks) and, where applicable, HPM-specific datasets. Canonical vs.\ variant sets (from the mutator) are kept disjoint for fidelity measurement.
+\textbf{(2) Strong system prompt + single guard:} (1) plus a \textbf{fixed strong system prompt} and standard chat template, representing a common lightweight production stack.
 
-\textbf{Metrics.} We use a multi-dimensional protocol. \textbf{Security}: RSR and residual extraction rate (e.g., F1 under multi-round agents); target reduction and round-budget exhaustion, not necessarily zero residual; decoy-hit rate and density; \textbf{spatio-temporal round budget} (max rounds or tokens before rate-limit/session circuit-breaker); verification that $C_{\mathrm{attack}} > V(t)$ where measurable (cost-function inequality, \S\ref{sec:paradigm-economics}). \textbf{Fidelity}: Eval consistency on canonical vs.\ variant set kept small. \textbf{Reconstruction efficacy}: ASR reduction vs.\ attack baselines; judge-ensemble FPR via mandatory human calibration; strict token-level pipeline standardization; empirical failure probability distribution (multi-sample per variant) with policy update only when distribution significantly exceeds threshold. \textbf{Mutation quality}: Naturalness, BERTScore, oracle consistency, exemplar adherence. \textbf{Operational cost}: \textbf{End-to-end mutation latency} (time from failure signal to next admissible variant) and \textbf{token overhead ratio} (extra tokens for exemplar retrieval and injection vs.\ baseline) are mandatory to ensure economic scalability at machine speed~\cite{ControlledMutation_SafetyEval}. \textbf{Audit}: Lineage and evidence chains for release gating (DUC/DUA-E style).
+\textbf{(3) RAG safety retrieval without joint key:} Top-$K$ safety exemplars injected into the model, but retrieval uses \textbf{prompt embedding only}---to isolate the contribution of the joint key.
+
+\textbf{(4) Input perturbation:} SmoothLLM-style randomization/perturbation without architectural reconstruction or controlled mutation.
+
+\textbf{(5) Intent-based filtering only:} Semantic or intent firewall without ID alignment or decoys.
+
+Baselines (1)--(5) quantify gains along the three axes of Decoupled Safety Theory vs.\ single-component or input-only defenses; exploratory comparisons may add other SOTA from the literature with hyperparameters and citations in the appendix.
+
+\subsection{Dataset Splits and Leakage Control}
+\label{sec:eval-splits}
+
+\textbf{Disjoint sets.} Canonical evaluation sets, mutator-produced variant sets, and policy/threshold tuning sets are \textbf{pairwise disjoint}. The \textbf{benign validation set} used to set joint-key and meta-cognitive thresholds must be independent of the final \textbf{frozen test set}.
+
+\textbf{Procedure.} \textbf{Train/tune}: attack traces and failure modes are used only for candidate policy/threshold search; \textbf{validation}: thresholds are chosen on a hold-out attack distribution (e.g., target FPR); \textbf{test}: all hyperparameters are frozen and ASR, residual extraction, and utility are reported once. If oracle labels participate in mutator training, state this and mitigate leakage risk (e.g., sanitized oracle).
+
+\subsection{Operational Metric Definitions}
+\label{sec:eval-metrics}
+
+\textbf{Safety and refusal.} \textbf{RSR} (Refusal Success Rate): on a \textbf{harmful/violation prompt set}, the fraction of requests for which the model output is judged a \textbf{safe refusal} (including template degradation), counted at \textbf{request granularity}. \textbf{ASR} (Attack Success Rate): fraction of attacks meeting the dataset-specific success definition (e.g., jailbreak produces harmful content, or extraction F1 exceeds a threshold).
+
+\textbf{Residual extraction.} Under multi-round settings, report both \textbf{final-turn} and \textbf{session-max F1} against reference secret spans (synthetic secrets, segmented hashes, etc.), with explicit construction of references.
+
+\textbf{Operationalizing $C_{\mathrm{attack}} > V(t)$.} In experiments, use \textbf{computable proxies}: let $C_{\mathrm{attack}}$ be the \textbf{expected query cost} to reach F1 $>\tau$, with $\hat{C} = \mathbb{E}[N_{\mathrm{rounds}}] \cdot c_{\mathrm{token}} + c_{\mathrm{wall}}$ for pre-specified unit costs $c_{\mathrm{token}}$, $c_{\mathrm{wall}}$; let $V(t)$ be the maximum tolerable extraction loss (or equivalent round bound) within a rotation window from administrative policy. Prefer reporting \textbf{curves} (F1 vs.\ rounds, $\hat{C}$ vs.\ $\tau$) over a single inequality scalar.
+
+\textbf{Judge FPR.} On a \textbf{held-out benign request set} independent of attack sets, the rate at which the safety stack falsely flags violation or triggers inappropriate degradation; state source and size of the benign set.
+
+\textbf{Distributional evaluation and policy updates.} For each variant, draw $n$ random samples (fixed $n\ge 5$), estimate empirical failure rate $\hat{p}$; trigger policy change only when $\hat{p}$ exceeds an update threshold at one-sided confidence $\alpha$ (e.g., Clopper--Pearson or bootstrap). Do not use a single greedy decode as the decision.
+
+\textbf{Operational cost and latency.} Decompose \textbf{end-to-end mutation latency} into detection, retrieval, mutator, and publish/rollback; report p50/p95/p99 for each. Measure \textbf{synchronous-path latency} (context confusion + lightweight meta-cognitive) p99 on stated hardware to validate the $<$50\,ms budget. \textbf{Token overhead ratio}: extra prompt tokens vs.\ a no-retrieval baseline.
+
+\textbf{Audit.} Lineage and evidence chains for release gating (DUC/DUA-E style), linking policy versions to evaluation run IDs.
+
+\subsection{Statistical Reporting, Primary Metrics, and Multiple Comparisons}
+\label{sec:eval-stats}
+
+\textbf{Randomness.} Report ASR, RSR, FPR, and F1 with at least \textbf{3--5 random seeds} or bootstrap 95\% confidence intervals; fix seeds or stratify reporting for decoding temperature, judge sampling, and mutator randomness.
+
+\textbf{Primary metrics.} For deployment scenarios, use a \textbf{joint objective}: report \textbf{ASR (lower is better)} together with \textbf{benign task success rate / improper refusal rate} on Track A, avoiding single-metric gaming.
+
+\textbf{Multiple comparisons.} When many attacks and defenses are shown jointly, label \textbf{exploratory analyses} or state multiple-comparison handling; main tables focus on pre-registered \textbf{primary hypotheses}.
+
+\subsection{Utility, Decoy-DoS, and Slices}
+\label{sec:eval-utility}
+
+\textbf{Benign utility.} Beyond FPR, report completion rate on a \textbf{representative benign task set} (e.g., summarization, coding, multi-turn tool use) to capture business harm from over-refusal.
+
+\textbf{Quantifying decoy-DoS.} Under fixed rate limits, simulate high-frequency decoy hits and report \textbf{benign request availability} and \textbf{cascading timeout rate} where applicable, consistent with \S\ref{sec:physics}.
+
+\textbf{Slices (optional).} If claiming broad deployment, tabulate safety--utility trade-offs by \textbf{language, domain, and request length}, not only a global average.
+
+\subsection{Human Factors and Mandatory Human Calibration}
+\label{sec:eval-human}
+
+\textbf{Mandatory human calibration (e.g., 5\% audit).} The protocol must include annotation guidelines, inter-rater agreement (e.g., Cohen's $\kappa$), and whether auditors are \textbf{independent} of the authors. Calibration corrects ensemble FPR and zero-day consensus failures; it is not the sole source of primary metrics.
+
+\subsection{Minimal Verifiable Experiment Bundle}
+\label{sec:eval-minimal}
+
+When space is limited, prioritize a \textbf{minimal bundle} supporting the three theoretical axes: (i) \textbf{Information economics}: multi-round extraction F1--round curves + ablations for context confusion (ID/decoys); (ii) \textbf{Axiological anchoring}: on HPM sets, ASR and benign success under CoT on/off and under the defensive-degradation path; (iii) \textbf{Representational anomaly}: under PBU, \textbf{joint key vs.\ semantic-only retrieval} hit rate and downstream correction success; keep representation-aligned PBU on Track B as a targeted stress test.
 
 \subsection{Feedback Loop and Governance}
 
@@ -258,9 +342,34 @@ LLM data extraction and reconstruction are well studied~\cite{llm-reconstruction
 We have reframed LLM safety from a ``pipeline of defenses'' to a \textbf{paradigm}: \textbf{Decoupled Safety Theory}, grounded in three fundamental failure theorems and their positive counterparts---information economics of multi-round extraction, axiological anchoring and defensive degradation, and representational anomaly in meta-cognition. Architectural reconstruction (context confusion engine, hybrid judge ensemble with distributional evaluation, defensive degradation and heterogeneous recovery) and controlled mutation (meta-cognitive monitor, joint-key exemplar retrieval, high-density expert transfer) are \emph{technical instantiations} of this paradigm. We have stated the physics of decoupled safety---asset rotatability, degradation/availability, and representation non-linearity---so that the design's operating boundaries are explicit. As LLMs become infrastructure, this paradigm shift is a necessary step toward scalable, auditable, and resilient safety at machine speed.
 
 %-------------------------------------------------------------------------------
+\appendix
+\section{Appendix: Evaluation Matrix and Build Manifest}
+\label{sec:appendix-eval}
+
+Table~\ref{tab:eval-matrix} summarizes threat-model tracks, typical attacks/datasets, and primary metrics. When building PDFs and artifacts, record model IDs, checkpoints, dependency versions, and random seeds in artifact metadata (e.g., \texttt{sbom.json} or experiment log headers) to satisfy reproducibility review.
+
+\begin{table*}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{2.6cm}p{2.4cm}p{3.4cm}p{5.8cm}@{}}
+\toprule
+\textbf{Track} & \textbf{Attack / stressor} & \textbf{Data and budget} & \textbf{Primary reported metrics} \\
+\midrule
+Track A & Multi-round extraction, HPM, jailbreak prompts, decoy-DoS & Standard harmful sets / multi-round benchmarks; fixed $N_{\max}$, token budget, rate limits & ASR, RSR, \textbf{benign task success}, residual extraction F1, \textbf{benign SLA} (\S\ref{sec:eval-utility}) \\
+Track B & GCG, representation-aligned PBU & Homologous victim; state gradient steps, adversarial length, hidden-state queryability & Component upper-bound ASR, attack cost $\hat{C}$; \textbf{not} merged with Track A \\
+\midrule
+\multicolumn{4}{@{}p{0.96\textwidth}@{}}{\textbf{Reproducibility checklist (fill per run in logs or appendix):} Base model and revision; tokenizer/chat template; judge model IDs and versions; context-confusion and decoy parameter hashes; joint-key threshold and benign validation set version; decoding temperature and top-$p$; random seed list; Track A/B and disclosure level L0--L2.} \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation matrix: \textbf{Track A/B} separation, attack surfaces, and primary metrics. Benign SLA and utility slices: \S\ref{sec:eval-utility}.}
+\label{tab:eval-matrix}
+\end{table*}
+
+%-------------------------------------------------------------------------------
 \section*{Availability}
 %-------------------------------------------------------------------------------
-Artifacts and extended proofs will be made available subject to institutional and export-control review.
+Artifacts and extended proofs will be made available subject to institutional and export-control review. Build outputs (including \texttt{.tex}, \texttt{.bib}, generated PDFs, and reproduction scripts) are versioned under the \texttt{paper/} directory by default.
 
 %-------------------------------------------------------------------------------
 \section*{Acknowledgments}

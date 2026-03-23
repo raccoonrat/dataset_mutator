@@ -163,6 +163,66 @@ func TestHandlerObfuscateMinimalPreservesIP(t *testing.T) {
 	}
 }
 
+func TestExperimentModeIntentOnlySkipsDecoyAndObfuscation(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(b), "user-uuid-550e8400-e29b-41d4-a716-446655440000") {
+			t.Errorf("expected raw uuid in upstream body when obfuscation off, got %s", string(b))
+		}
+		if strings.Contains(string(b), "decoy_session") {
+			t.Errorf("did not expect decoy in upstream body: %s", string(b))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer up.Close()
+
+	var buf bytes.Buffer
+	h := &Handler{
+		UpstreamBase: strings.TrimSuffix(up.URL, ""),
+		UpstreamClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		MaxBody:               1 << 20,
+		Policy:                policy.NewMemoryStore(),
+		Log:                   logsink.NewJSONLines(&buf),
+		Obfuscate:             obfuscate.Prompt,
+		DefaultExperimentMode: "default",
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	uuid := "user-uuid-550e8400-e29b-41d4-a716-446655440000"
+	reqBody := `{"model":"m","messages":[{"role":"user","content":"ping ` + uuid + ` done"}]}`
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/chat/completions", strings.NewReader(reqBody))
+	req.Header.Set("X-Gateway-Experiment-Mode", "intent_only")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	line := bytes.TrimSpace(bytes.Split(buf.Bytes(), []byte{'\n'})[0])
+	var ev contracts.GatewayLogEvent
+	if err := json.Unmarshal(line, &ev); err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if ev.InjectedDecoyID != "" {
+		t.Fatalf("expected empty decoy id, got %q", ev.InjectedDecoyID)
+	}
+	if !strings.Contains(ev.RawUserPrompt, uuid) && !strings.Contains(ev.ObfuscatedPrompt, uuid) {
+		t.Fatalf("expected uuid in snapshot")
+	}
+	if !strings.Contains(ev.ObfuscatedPrompt, uuid) {
+		t.Fatalf("intent_only should not strip uuid, got obf=%q", ev.ObfuscatedPrompt)
+	}
+	if ev.GatewayExperimentMode != "intent_only" {
+		t.Fatalf("mode %q", ev.GatewayExperimentMode)
+	}
+}
+
 func TestPolicySeedEquivalent(t *testing.T) {
 	store := policy.NewMemoryStore()
 	if err := store.Upsert(contracts.PolicyRule{

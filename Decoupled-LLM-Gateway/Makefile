@@ -1,4 +1,4 @@
-.PHONY: test vet bench-obfuscate run-echo run-gateway redis-up
+.PHONY: test vet bench-obfuscate run-echo run-gateway redis-up paper-eval-check
 
 # Go refuses to build when GOPATH and GOMODCACHE are both empty (some shells/IDEs export empty GOPATH).
 ifeq ($(strip $(GOMODCACHE)),)
@@ -31,3 +31,7 @@ run-gateway:
 
 redis-up:
 	docker compose up -d redis
+
+# Paper eval harness sanity (no network; CI uses this)
+paper-eval-check:
+	python3 experiments/run_paper_benchmark.py --self-check

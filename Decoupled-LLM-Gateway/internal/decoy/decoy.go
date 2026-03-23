@@ -19,6 +19,10 @@ func NewID() (string, error) {
 }
 
 // InjectIntoSystem returns updated system content with a decoy marker.
+// Empty decoyID is a no-op (used for paper-eval / intent-only baselines).
 func InjectIntoSystem(systemContent, decoyID string) string {
+	if decoyID == "" {
+		return systemContent
+	}
 	return systemContent + fmt.Sprintf(systemDirectiveFmt, decoyID)
 }

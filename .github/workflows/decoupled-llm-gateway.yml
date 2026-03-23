@@ -31,6 +31,9 @@ jobs:
       - name: Worker CLI
         run: python3 worker/main.py --help
         working-directory: Decoupled-LLM-Gateway
+      - name: Paper benchmark self-check
+        run: python3 experiments/run_paper_benchmark.py --self-check
+        working-directory: Decoupled-LLM-Gateway
 
   worker-smoke:
     runs-on: ubuntu-latest

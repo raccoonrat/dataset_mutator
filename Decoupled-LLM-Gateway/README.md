@@ -237,6 +237,49 @@ flowchart LR
 
 ---
 
+## 论文实验数据（Track A 协议）
+
+与《Beyond Model Reflection / 解耦安全》**§5 评估协议**对齐的**可脚本化**基准，输出 JSON（便于再跑随机种子、算置信区间或导入分析笔记本）。
+
+| 论文防御基线 | 本仓库实现方式 |
+|--------------|----------------|
+| 统一架构（混淆 + 诱饵 + 策略） | 默认网关，不设 `X-Gateway-Experiment-Mode` |
+| 无上下文混淆 | `X-Gateway-Experiment-Mode: no_obfuscate` |
+| 无诱饵注入 | `no_decoy` |
+| 仅意图类（无 ID 对齐、无诱饵） | `intent_only` |
+| 单 guard（无网关栈） | 直连 `echo-llm`：`--defenses direct_upstream`；配合 `X-Echo-Refuse-Substr` 模拟关键词拒绝 |
+| SmoothLLM 式输入扰动 | `smooth_llm`：客户端对用户文本做轻量空白抖动 |
+
+**上游 echo 评测开关**（亦可通过网关转发的 HTTP 头传递，便于 A/B 对照）：
+
+| 变量 / 头 | 作用 |
+|-----------|------|
+| `ECHO_REFUSE_SUBSTR` / `X-Echo-Refuse-Substr` | 用户消息含该子串则返回 `REFUSAL_SINGLE_GUARD`（模拟单裁判拒绝） |
+| `ECHO_EVAL_SECRET` / `X-Echo-Eval-Secret` | 与泄漏联用：在「系统块」中附加 `EVAL_SECRET=…` 供抽取 F1 / ASR 计量 |
+| `ECHO_LEAK_SYSTEM` / `X-Echo-Leak-System: 1` | 将 system（含诱饵/秘密）拼进助手回复，模拟泄露 |
+
+**网关环境变量**：`GATEWAY_EXPERIMENT_MODE` 取 `default` \| `no_obfuscate` \| `no_decoy` \| `intent_only`；每条请求可用 `X-Gateway-Experiment-Mode` **覆盖**（实验台专用，生产入口应剥离该头）。
+
+**跑分**（需已启动 `echo-llm` 与 `gateway`）：
+
+```bash
+# 建议关闭网关 NDJSON  stdout，避免与脚本输出混在一起：GATEWAY_ASYNC_LOG=0
+GATEWAY_ASYNC_LOG=0 GATEWAY_UPSTREAM=http://127.0.0.1:9090 go run ./cmd/gateway
+```
+
+```bash
+python3 experiments/run_paper_benchmark.py \
+  --gateway-url http://127.0.0.1:8080 \
+  --upstream-url http://127.0.0.1:9090 \
+  -o /tmp/paper_eval.json
+```
+
+指标字段：`rsr`（拒绝成功）、`asr_extraction`（秘密是否泄露）、`extraction_f1`（抽取 token-F1）、`latency_ms`。**Track B**（GCG 等梯度攻击）不在此脚本内，需在离线训练环境中单独上报。
+
+本地自检（无网络）：`make paper-eval-check`。
+
+---
+
 ## 仓库布局
 
 | 路径 | 说明 |
@@ -253,6 +296,7 @@ flowchart LR
 | `internal/policy/redis_refresh.go` | M3：从 Redis Hash 刷新策略 |
 | `worker/main.py` | M3：Redis 消费组 + stdin 回退 |
 | `worker/requirements.txt` | Python 依赖（redis-py） |
+| `experiments/run_paper_benchmark.py` | 论文 §5 对齐的 JSON 基准（Track A） |
 | `docker-compose.yml` | 本地 Redis |
 | `scripts/m3_demo.sh` | M3 演示步骤提示 |
 | `examples/policy_seed.json` | 演示用策略种子 |
@@ -316,8 +360,11 @@ make run-gateway 2>/dev/null | python3 worker/main.py
 | `GATEWAY_REDIS_STREAM` | `decoupled:gateway:events` | Stream 名称 |
 | `GATEWAY_POLICY_REDIS_HASH` | `decoupled:policy:rules` | 策略规则 Redis Hash |
 | `GATEWAY_POLICY_REFRESH_MS` | `2000` | 从 Redis 刷新策略的周期（毫秒） |
+| `GATEWAY_EXPERIMENT_MODE` | `default` | `no_obfuscate` / `no_decoy` / `intent_only`（可被请求头覆盖） |
 | `ECHO_LISTEN` | `:9090` | 回声服务监听地址 |
 | `ECHO_LEAK_SYSTEM` | `0` | `1` 时在回复中附加 system 内容（M3 诱饵泄露演示） |
+| `ECHO_EVAL_SECRET` | 空 | 评测用秘密串（亦可用 `X-Echo-Eval-Secret`） |
+| `ECHO_REFUSE_SUBSTR` | 空 | 用户句含该子串则拒绝（亦可用 `X-Echo-Refuse-Substr`） |
 
 **Worker 环境变量（Redis 模式）**：`WORKER_REDIS_URL`（如 `redis://127.0.0.1:6379/0`）、`WORKER_STREAM`、`WORKER_GROUP`、`WORKER_CONSUMER`、`WORKER_POLICY_HASH`（默认值与网关侧一致）。
 

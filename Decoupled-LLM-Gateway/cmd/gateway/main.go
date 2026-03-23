@@ -53,7 +53,7 @@ func main() {
 		log.Fatalf("gateway: %v", err)
 	}
 
-	log.Printf("gateway listening %s → upstream %s (obfuscate profile=%q rules_file=%q)",
-		cfg.ListenAddr, h.UpstreamBase, cfg.ObfuscateProfile, cfg.ObfuscateRulesFile)
+	log.Printf("gateway listening %s → upstream %s (obfuscate profile=%q rules_file=%q experiment_mode=%q)",
+		cfg.ListenAddr, h.UpstreamBase, cfg.ObfuscateProfile, cfg.ObfuscateRulesFile, cfg.ExperimentMode)
 	log.Fatal(http.ListenAndServe(cfg.ListenAddr, h))
 }

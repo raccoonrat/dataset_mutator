@@ -125,6 +125,9 @@ func applyObfuscation(msgs *[]Message, fn func(string) string) {
 }
 
 func ensureSystemDecoy(msgs *[]Message, decoyID string) {
+	if decoyID == "" {
+		return
+	}
 	if len(*msgs) == 0 {
 		return
 	}

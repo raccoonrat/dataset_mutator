@@ -25,6 +25,10 @@ type Config struct {
 	RedisStream        string
 	PolicyRedisHashKey string
 	PolicyRefreshMS    int
+
+	// Paper evaluation: default gateway behavior variant (per-request header can override).
+	// Values: default | no_obfuscate | no_decoy | intent_only (no obfuscation + no decoy).
+	ExperimentMode string
 }
 
 func FromEnv() (*Config, error) {
@@ -53,6 +57,10 @@ func FromEnv() (*Config, error) {
 	if refreshMS <= 0 {
 		refreshMS = 2000
 	}
+	expMode := strings.TrimSpace(strings.ToLower(os.Getenv("GATEWAY_EXPERIMENT_MODE")))
+	if expMode == "" {
+		expMode = "default"
+	}
 
 	return &Config{
 		ListenAddr:         listen,
@@ -67,6 +75,7 @@ func FromEnv() (*Config, error) {
 		RedisStream:        redisStream,
 		PolicyRedisHashKey: policyHash,
 		PolicyRefreshMS:    refreshMS,
+		ExperimentMode:     expMode,
 	}, nil
 }
 

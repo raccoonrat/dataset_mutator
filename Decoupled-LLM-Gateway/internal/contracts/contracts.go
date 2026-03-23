@@ -10,6 +10,11 @@ type GatewayLogEvent struct {
 	ObfuscatedPrompt     string `json:"obfuscated_prompt"`
 	LLMResponse          string `json:"llm_response"`
 	DegradationTriggered bool   `json:"degradation_triggered"`
+	// Optional paper-eval fields (set when clients send experiment headers).
+	ExperimentRunID     string `json:"experiment_run_id,omitempty"`
+	DefenseBaseline     string `json:"defense_baseline,omitempty"`
+	GatewayExperimentMode string `json:"gateway_experiment_mode,omitempty"`
+	SyncProcessingMS    int64  `json:"sync_processing_ms,omitempty"`
 }
 
 // PolicyRule is written by the async loop into the gateway's policy cache (Async → Gateway).

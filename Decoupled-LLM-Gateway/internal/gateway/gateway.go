@@ -18,6 +18,12 @@ import (
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/policy"
 )
 
+const (
+	headerGatewayExperimentMode = "X-Gateway-Experiment-Mode"
+	headerExperimentRunID       = "X-Experiment-Run-Id"
+	headerDefenseBaseline        = "X-Defense-Baseline"
+)
+
 // Handler is the sync hot path: policy → obfuscate → decoy → upstream.
 type Handler struct {
 	UpstreamBase   string
@@ -27,6 +33,31 @@ type Handler struct {
 	Log            logsink.Sink
 	// Obfuscate rewrites user-visible message text; nil uses package default obfuscate.Prompt.
 	Obfuscate func(string) string
+	// DefaultExperimentMode from GATEWAY_EXPERIMENT_MODE; per-request header overrides.
+	DefaultExperimentMode string
+}
+
+func resolveExperimentMode(r *http.Request, fallback string) string {
+	if v := strings.TrimSpace(r.Header.Get(headerGatewayExperimentMode)); v != "" {
+		return strings.ToLower(v)
+	}
+	if fallback == "" {
+		return "default"
+	}
+	return strings.ToLower(fallback)
+}
+
+func experimentFlags(mode string) (noObfuscate, noDecoy bool) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "intent_only":
+		return true, true
+	case "no_obfuscate":
+		return true, false
+	case "no_decoy":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +66,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	traceID := r.Header.Get("X-Trace-ID")
 	if traceID == "" {
 		traceID = "req-" + randomHex(6)
@@ -52,30 +84,43 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obfuscateFn := h.applyObfuscation
+	expMode := resolveExperimentMode(r, h.DefaultExperimentMode)
+	noObf, noDecoy := experimentFlags(expMode)
+	obfuscateFn := h.obfuscateForRequest(noObf)
 	obfuscatedSnapshot, err := chat.ObfuscatedSnapshotFromBody(body, obfuscateFn)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	decoyID, err := decoy.NewID()
-	if err != nil {
-		http.Error(w, "decoy id", http.StatusInternalServerError)
-		return
+	var decoyID string
+	if !noDecoy {
+		decoyID, err = decoy.NewID()
+		if err != nil {
+			http.Error(w, "decoy id", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	extras := func(llm string, degraded bool) contracts.GatewayLogEvent {
+		return contracts.GatewayLogEvent{
+			TraceID:               traceID,
+			Timestamp:             time.Now().Unix(),
+			InjectedDecoyID:       decoyID,
+			RawUserPrompt:         rawSnapshot,
+			ObfuscatedPrompt:      obfuscatedSnapshot,
+			LLMResponse:           llm,
+			DegradationTriggered:  degraded,
+			ExperimentRunID:       strings.TrimSpace(r.Header.Get(headerExperimentRunID)),
+			DefenseBaseline:       strings.TrimSpace(r.Header.Get(headerDefenseBaseline)),
+			GatewayExperimentMode: expMode,
+			SyncProcessingMS:      time.Since(start).Milliseconds(),
+		}
 	}
 
 	if rule := h.Policy.MatchPrompt(obfuscatedSnapshot); rule != nil && rule.Action == policy.ActionDegradeToTemplate {
 		respText := openAICompletionJSON(rule.TemplateResponse)
-		event := contracts.GatewayLogEvent{
-			TraceID:              traceID,
-			Timestamp:            time.Now().Unix(),
-			InjectedDecoyID:      decoyID,
-			RawUserPrompt:        rawSnapshot,
-			ObfuscatedPrompt:     obfuscatedSnapshot,
-			LLMResponse:          respText,
-			DegradationTriggered: true,
-		}
+		event := extras(respText, true)
 		h.Log.Emit(event)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -110,6 +155,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rid := r.Header.Get("X-Request-ID"); rid != "" {
 		upReq.Header.Set("X-Request-ID", rid)
 	}
+	// Propagate eval headers to upstream echo-llm (paper benchmarks).
+	for _, k := range []string{
+		"X-Echo-Eval-Secret",
+		"X-Echo-Refuse-Substr",
+		"X-Echo-Leak-System",
+	} {
+		if v := r.Header.Get(k); v != "" {
+			upReq.Header.Set(k, v)
+		}
+	}
 
 	resp, err := client.Do(upReq)
 	if err != nil {
@@ -129,15 +184,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	llmSnippet := extractAssistantContent(upBody)
-	event := contracts.GatewayLogEvent{
-		TraceID:              traceID,
-		Timestamp:            time.Now().Unix(),
-		InjectedDecoyID:      decoyID,
-		RawUserPrompt:        rawSnapshot,
-		ObfuscatedPrompt:     obfuscatedSnapshot,
-		LLMResponse:          llmSnippet,
-		DegradationTriggered: false,
-	}
+	event := extras(llmSnippet, false)
 	h.Log.Emit(event)
 
 	for k, vv := range resp.Header {
@@ -197,11 +244,19 @@ func openAICompletionJSON(content string) string {
 	return string(b)
 }
 
-func (h *Handler) applyObfuscation(s string) string {
+func (h *Handler) baseObfuscate() func(string) string {
 	if h.Obfuscate != nil {
-		return h.Obfuscate(s)
+		return h.Obfuscate
 	}
-	return obfuscate.Prompt(s)
+	return obfuscate.Prompt
+}
+
+func (h *Handler) obfuscateForRequest(disable bool) func(string) string {
+	if disable {
+		return func(s string) string { return s }
+	}
+	base := h.baseObfuscate()
+	return base
 }
 
 // New builds a handler from config (upstream, obfuscation profile, optional extra rules file).
@@ -216,9 +271,10 @@ func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, e
 		UpstreamClient: &http.Client{
 			Timeout: cfg.UpstreamTimeout,
 		},
-		MaxBody:   cfg.MaxBodyBytes,
-		Policy:    store,
-		Log:       sink,
-		Obfuscate: eng.Apply,
+		MaxBody:               cfg.MaxBodyBytes,
+		Policy:                store,
+		Log:                   sink,
+		Obfuscate:             eng.Apply,
+		DefaultExperimentMode: cfg.ExperimentMode,
 	}, nil
 }
