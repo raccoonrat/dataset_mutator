@@ -21,22 +21,27 @@ import (
 const (
 	headerGatewayExperimentMode = "X-Gateway-Experiment-Mode"
 	headerExperimentRunID       = "X-Experiment-Run-Id"
-	headerDefenseBaseline        = "X-Defense-Baseline"
+	headerDefenseBaseline       = "X-Defense-Baseline"
 )
 
 // Handler is the sync hot path: policy → obfuscate → decoy → upstream.
 type Handler struct {
-	UpstreamBase   string
+	UpstreamBase string
 	// UpstreamBearerToken, if non-empty, sets Authorization: Bearer on upstream requests.
 	UpstreamBearerToken string
-	UpstreamClient *http.Client
-	MaxBody        int64
-	Policy         policy.Store
-	Log            logsink.Sink
+	UpstreamClient      *http.Client
+	MaxBody             int64
+	Policy              policy.Store
+	Log                 logsink.Sink
 	// Obfuscate rewrites user-visible message text; nil uses package default obfuscate.Prompt.
 	Obfuscate func(string) string
 	// DefaultExperimentMode from GATEWAY_EXPERIMENT_MODE; per-request header overrides.
 	DefaultExperimentMode string
+	// LogAfterResponse: if true, Log.Emit runs in a goroutine after the response body is written (avoids blocking on Redis).
+	LogAfterResponse bool
+	// LogMaxPromptRunes / LogMaxLLMRunes: 0 = do not truncate logged text (UTF-8 rune counts).
+	LogMaxPromptRunes int
+	LogMaxLLMRunes    int
 }
 
 func resolveExperimentMode(r *http.Request, fallback string) string {
@@ -80,20 +85,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawSnapshot, err := chat.UserPromptSnapshotFromBody(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	expMode := resolveExperimentMode(r, h.DefaultExperimentMode)
 	noObf, noDecoy := experimentFlags(expMode)
 	obfuscateFn := h.obfuscateForRequest(noObf)
-	obfuscatedSnapshot, err := chat.ObfuscatedSnapshotFromBody(body, obfuscateFn)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 
 	var decoyID string
 	if !noDecoy {
@@ -104,7 +98,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	extras := func(llm string, degraded bool) contracts.GatewayLogEvent {
+	rawSnapshot, obfuscatedSnapshot, outBody, err := chat.PrepareRequestBody(body, obfuscateFn, decoyID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	buildEvent := func(llm string, degraded bool) contracts.GatewayLogEvent {
 		return contracts.GatewayLogEvent{
 			TraceID:               traceID,
 			Timestamp:             time.Now().Unix(),
@@ -122,17 +122,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if rule := h.Policy.MatchPrompt(obfuscatedSnapshot); rule != nil && rule.Action == policy.ActionDegradeToTemplate {
 		respText := openAICompletionJSON(rule.TemplateResponse)
-		event := extras(respText, true)
-		h.Log.Emit(event)
+		event := buildEvent(respText, true)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(respText))
-		return
-	}
-
-	outBody, err := chat.TransformRequestBody(body, obfuscateFn, decoyID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.emitLogEvent(event)
 		return
 	}
 
@@ -189,8 +183,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	llmSnippet := extractAssistantContent(upBody)
-	event := extras(llmSnippet, false)
-	h.Log.Emit(event)
+	event := buildEvent(llmSnippet, false)
 
 	for k, vv := range resp.Header {
 		if k == "Content-Length" {
@@ -202,6 +195,37 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(upBody)
+	h.emitLogEvent(event)
+}
+
+func (h *Handler) emitLogEvent(e contracts.GatewayLogEvent) {
+	h.truncateLogEvent(&e)
+	if h.LogAfterResponse {
+		go h.Log.Emit(e)
+		return
+	}
+	h.Log.Emit(e)
+}
+
+func (h *Handler) truncateLogEvent(e *contracts.GatewayLogEvent) {
+	e.RawUserPrompt = truncateRunes(e.RawUserPrompt, h.LogMaxPromptRunes)
+	e.ObfuscatedPrompt = truncateRunes(e.ObfuscatedPrompt, h.LogMaxPromptRunes)
+	e.LLMResponse = truncateRunes(e.LLMResponse, h.LogMaxLLMRunes)
+}
+
+// truncateRunes returns s unchanged if max <= 0; otherwise cuts after max UTF-8 runes and appends "...".
+func truncateRunes(s string, max int) string {
+	if max <= 0 || s == "" {
+		return s
+	}
+	n := 0
+	for i := range s {
+		if n == max {
+			return s[:i] + "..."
+		}
+		n++
+	}
+	return s
 }
 
 func extractAssistantContent(body []byte) string {
@@ -272,8 +296,8 @@ func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, e
 	}
 	base := strings.TrimRight(cfg.UpstreamURL.String(), "/")
 	return &Handler{
-		UpstreamBase:          base,
-		UpstreamBearerToken:   cfg.UpstreamAPIKey,
+		UpstreamBase:        base,
+		UpstreamBearerToken: cfg.UpstreamAPIKey,
 		UpstreamClient: &http.Client{
 			Timeout: cfg.UpstreamTimeout,
 		},
@@ -282,5 +306,8 @@ func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, e
 		Log:                   sink,
 		Obfuscate:             eng.Apply,
 		DefaultExperimentMode: cfg.ExperimentMode,
+		LogAfterResponse:      cfg.LogAfterResponse,
+		LogMaxPromptRunes:     cfg.LogMaxPromptRunes,
+		LogMaxLLMRunes:        cfg.LogMaxLLMRunes,
 	}, nil
 }

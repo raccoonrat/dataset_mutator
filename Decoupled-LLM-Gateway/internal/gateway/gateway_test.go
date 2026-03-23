@@ -223,6 +223,15 @@ func TestExperimentModeIntentOnlySkipsDecoyAndObfuscation(t *testing.T) {
 	}
 }
 
+func TestTruncateRunes(t *testing.T) {
+	if got := truncateRunes("hello世界", 0); got != "hello世界" {
+		t.Fatalf("0 cap: %q", got)
+	}
+	if got := truncateRunes("hello世界", 5); got != "hello..." {
+		t.Fatalf("5 runes: %q", got)
+	}
+}
+
 func TestPolicySeedEquivalent(t *testing.T) {
 	store := policy.NewMemoryStore()
 	if err := store.Upsert(contracts.PolicyRule{

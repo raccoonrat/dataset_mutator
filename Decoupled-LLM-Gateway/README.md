@@ -132,6 +132,7 @@ go run ./cmd/gateway
 
 - 未配置 `GATEWAY_REDIS_ADDR`：默认 **stdout** 一行 JSON（NDJSON）。  
 - 配置 Redis：**Redis Stream** 一条消息，`payload` 为与下述相同结构的 JSON；若 `GATEWAY_ASYNC_LOG=1`，可同时写 **stdout**（`logsink.Multi`）。
+- **热路径顺序**：先 **写完 HTTP 响应体**，再记日志。默认 `GATEWAY_LOG_AFTER_RESPONSE=1` 时在 **新 goroutine** 中 `Emit`，避免 Redis `XADD` 阻塞客户端；设为 `0` 则同步 `Emit`（仍在响应写出之后）。超长文本可用 `GATEWAY_LOG_MAX_*_RUNES` 截断日志字段以降低序列化与 Stream 负载。
 
 事件结构：
 
@@ -440,6 +441,9 @@ make run-gateway 2>/dev/null | python3 worker/main.py
 | `GATEWAY_UPSTREAM_TIMEOUT_MS` | `30000` | 上游 HTTP 超时 |
 | `GATEWAY_MAX_BODY_BYTES` | `4194304` | 请求/响应体大小上限 |
 | `GATEWAY_ASYNC_LOG` | `1` | `0` 关闭 NDJSON 事件输出 |
+| `GATEWAY_LOG_AFTER_RESPONSE` | `1` | `1`：响应写出后在 goroutine 中写日志（默认）；`0`：响应写出后同步写日志 |
+| `GATEWAY_LOG_MAX_PROMPT_RUNES` | `0` | 日志里 `raw_user_prompt` / `obfuscated_prompt` 最大 UTF-8 字符（rune）数，`0` 不截断 |
+| `GATEWAY_LOG_MAX_LLM_RUNES` | `0` | 日志里 `llm_response` 最大 rune 数，`0` 不截断 |
 | `GATEWAY_POLICY_SEED_FILE` | 空 | 启动时加载策略 JSON 数组 |
 | `GATEWAY_OBFUSCATE_PROFILE` | `strict` | `strict` / `full` / `minimal` / `balanced` |
 | `GATEWAY_OBFUSCATE_RULES_FILE` | 空 | 在 profile 之后追加执行的规则 JSON 数组 |

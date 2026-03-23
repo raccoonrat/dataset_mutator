@@ -56,6 +56,46 @@ func TransformRequestBody(body []byte, obfuscate func(string) string, decoyID st
 	return json.Marshal(root)
 }
 
+// PrepareRequestBody parses body once, returns raw user snapshot, obfuscated user snapshot (no decoy),
+// and the upstream JSON (obfuscated messages + optional decoy system). Equivalent to calling
+// UserPromptSnapshotFromBody, ObfuscatedSnapshotFromBody, and TransformRequestBody in sequence.
+func PrepareRequestBody(body []byte, obfuscate func(string) string, decoyID string) (rawSnap, obfSnap string, out []byte, err error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(body, &root); err != nil {
+		return "", "", nil, err
+	}
+	rawMsgs, ok := root["messages"]
+	if !ok {
+		return "", "", nil, fmt.Errorf("messages required")
+	}
+	var msgs []Message
+	if err := json.Unmarshal(rawMsgs, &msgs); err != nil {
+		return "", "", nil, err
+	}
+	if len(msgs) == 0 {
+		return "", "", nil, fmt.Errorf("messages required")
+	}
+	rawSnap = userPromptSnapshot(msgs)
+
+	obfMsgs := append([]Message(nil), msgs...)
+	applyObfuscation(&obfMsgs, obfuscate)
+	obfSnap = userPromptSnapshot(obfMsgs)
+
+	upMsgs := append([]Message(nil), msgs...)
+	applyObfuscation(&upMsgs, obfuscate)
+	ensureSystemDecoy(&upMsgs, decoyID)
+	outMsgs, err := json.Marshal(upMsgs)
+	if err != nil {
+		return "", "", nil, err
+	}
+	root["messages"] = json.RawMessage(outMsgs)
+	out, err = json.Marshal(root)
+	if err != nil {
+		return "", "", nil, err
+	}
+	return rawSnap, obfSnap, out, nil
+}
+
 // UserPromptSnapshotFromBody extracts user-role text before any transform (for logging / policy input).
 func UserPromptSnapshotFromBody(body []byte) (string, error) {
 	var root map[string]json.RawMessage

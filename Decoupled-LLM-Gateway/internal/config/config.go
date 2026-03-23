@@ -11,8 +11,8 @@ import (
 
 // Config is intentionally small: env-only, no config file dependency for MVP.
 type Config struct {
-	ListenAddr         string
-	UpstreamURL        *url.URL
+	ListenAddr  string
+	UpstreamURL *url.URL
 	// UpstreamAPIKey sent as Authorization: Bearer (OpenAI-compatible: DeepSeek, OpenAI, etc.).
 	// Resolved from GATEWAY_UPSTREAM_API_KEY, else DEEPSEEK_API_KEY, else OPENAI_API_KEY.
 	UpstreamAPIKey     string
@@ -32,6 +32,12 @@ type Config struct {
 	// Paper evaluation: default gateway behavior variant (per-request header can override).
 	// Values: default | no_obfuscate | no_decoy | intent_only (no obfuscation + no decoy).
 	ExperimentMode string
+
+	// LogAfterResponse: emit audit/log events after the response body is written (avoids Redis blocking the client).
+	LogAfterResponse bool
+	// LogMaxPromptRunes / LogMaxLLMRunes: 0 = no truncation (UTF-8 rune counts).
+	LogMaxPromptRunes int
+	LogMaxLLMRunes    int
 }
 
 func FromEnv() (*Config, error) {
@@ -72,6 +78,16 @@ func FromEnv() (*Config, error) {
 		upKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	}
 
+	logAfterResp := getenv("GATEWAY_LOG_AFTER_RESPONSE", "1") != "0"
+	maxPromptLog, _ := strconv.Atoi(getenv("GATEWAY_LOG_MAX_PROMPT_RUNES", "0"))
+	maxLLMLog, _ := strconv.Atoi(getenv("GATEWAY_LOG_MAX_LLM_RUNES", "0"))
+	if maxPromptLog < 0 {
+		maxPromptLog = 0
+	}
+	if maxLLMLog < 0 {
+		maxLLMLog = 0
+	}
+
 	return &Config{
 		ListenAddr:         listen,
 		UpstreamURL:        u,
@@ -87,6 +103,9 @@ func FromEnv() (*Config, error) {
 		PolicyRedisHashKey: policyHash,
 		PolicyRefreshMS:    refreshMS,
 		ExperimentMode:     expMode,
+		LogAfterResponse:   logAfterResp,
+		LogMaxPromptRunes:  maxPromptLog,
+		LogMaxLLMRunes:     maxLLMLog,
 	}, nil
 }
 

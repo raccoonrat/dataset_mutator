@@ -21,6 +21,32 @@ func TestTransformPreservesExtraKeys(t *testing.T) {
 	}
 }
 
+func TestPrepareRequestBodyMatchesPiecewise(t *testing.T) {
+	body := []byte(`{"model":"x","temperature":0.2,"messages":[{"role":"user","content":"id 550e8400-e29b-41d4-a716-446655440000"}]}`)
+	ob := func(s string) string {
+		return strings.ReplaceAll(s, "550e8400-e29b-41d4-a716-446655440000", "[ID_REMOVED]")
+	}
+	rawWant, err := UserPromptSnapshotFromBody(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obfWant, err := ObfuscatedSnapshotFromBody(body, ob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outWant, err := TransformRequestBody(body, ob, "decoy-z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, obf, out, err := PrepareRequestBody(body, ob, "decoy-z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != rawWant || obf != obfWant || string(out) != string(outWant) {
+		t.Fatalf("raw %q vs %q; obf %q vs %q; out %s vs %s", raw, rawWant, obf, obfWant, out, outWant)
+	}
+}
+
 func TestObfuscatedSnapshot(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"user","content":"id 550e8400-e29b-41d4-a716-446655440000"}]}`)
 	snap, err := ObfuscatedSnapshotFromBody(body, func(s string) string {
