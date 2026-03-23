@@ -320,10 +320,69 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `worker/requirements.txt` | Python 依赖（redis-py） |
 | `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-2` JSON 基准（Track A） |
 | `experiments/data/benign_prompts_en.txt` | 良性 FPR 套件默认提示列表 |
+| `experiments/examples/deepseek_sdk_smoke.py` | 可选：直连 DeepSeek（`pip install openai`） |
 | `docker-compose.yml` | 本地 Redis |
 | `scripts/m3_demo.sh` | M3 演示步骤提示 |
 | `examples/policy_seed.json` | 演示用策略种子 |
 | `examples/obfuscate_extra_rules.json` | 演示用追加混淆规则 |
+
+---
+
+## DeepSeek（及 OpenAI 兼容）上游
+
+DeepSeek 提供 **OpenAI 兼容** HTTP API：`POST /v1/chat/completions`。网关会把上游请求发往 `GATEWAY_UPSTREAM` + `/v1/chat/completions`，并在配置了密钥时自动加上 **`Authorization: Bearer <key>`**。
+
+**密钥优先级**（任选其一即可）：
+
+1. `GATEWAY_UPSTREAM_API_KEY`（显式、推荐）
+2. `DEEPSEEK_API_KEY`
+3. `OPENAI_API_KEY`
+
+**启动网关直连 DeepSeek**（无需本地 echo）：
+
+```bash
+export DEEPSEEK_API_KEY='你的key'
+export GATEWAY_UPSTREAM='https://api.deepseek.com'
+export GATEWAY_ASYNC_LOG=0
+# 可选：论文评测超时略放宽
+export GATEWAY_UPSTREAM_TIMEOUT_MS=120000
+go run ./cmd/gateway
+```
+
+客户端请求体里的 **`model`** 会原样转发，例如 **`deepseek-chat`**。评测脚本示例：
+
+```bash
+python3 experiments/run_paper_benchmark.py \
+  --openai-model deepseek-chat \
+  --defenses unified \
+  --scenarios benign_baseline \
+  -o /tmp/ds_smoke.json
+```
+
+**不经网关、直接用官方 Python SDK**（与网关并行，用于对照）：
+
+```bash
+pip3 install openai
+```
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ.get("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com",
+)
+response = client.chat.completions.create(
+    model="deepseek-chat",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Hello"},
+    ],
+    stream=False,
+)
+print(response.choices[0].message.content)
+```
 
 ---
 
@@ -372,7 +431,10 @@ make run-gateway 2>/dev/null | python3 worker/main.py
 | 变量 | 默认 | 含义 |
 |------|------|------|
 | `GATEWAY_LISTEN` | `:8080` | 网关监听地址 |
-| `GATEWAY_UPSTREAM` | `http://127.0.0.1:9090` | 上游 OpenAI 兼容 API 根 URL |
+| `GATEWAY_UPSTREAM` | `http://127.0.0.1:9090` | 上游 OpenAI 兼容 API 根 URL（DeepSeek：`https://api.deepseek.com`） |
+| `GATEWAY_UPSTREAM_API_KEY` | 空 | 上游 `Authorization: Bearer`；未设时依次尝试 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY` |
+| `DEEPSEEK_API_KEY` | 空 | 同上（便捷名） |
+| `OPENAI_API_KEY` | 空 | 同上 |
 | `GATEWAY_UPSTREAM_TIMEOUT_MS` | `30000` | 上游 HTTP 超时 |
 | `GATEWAY_MAX_BODY_BYTES` | `4194304` | 请求/响应体大小上限 |
 | `GATEWAY_ASYNC_LOG` | `1` | `0` 关闭 NDJSON 事件输出 |

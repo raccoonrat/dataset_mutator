@@ -27,6 +27,8 @@ const (
 // Handler is the sync hot path: policy → obfuscate → decoy → upstream.
 type Handler struct {
 	UpstreamBase   string
+	// UpstreamBearerToken, if non-empty, sets Authorization: Bearer on upstream requests.
+	UpstreamBearerToken string
 	UpstreamClient *http.Client
 	MaxBody        int64
 	Policy         policy.Store
@@ -152,6 +154,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upReq.Header.Set("Content-Type", "application/json")
+	if h.UpstreamBearerToken != "" {
+		upReq.Header.Set("Authorization", "Bearer "+h.UpstreamBearerToken)
+	}
 	if rid := r.Header.Get("X-Request-ID"); rid != "" {
 		upReq.Header.Set("X-Request-ID", rid)
 	}
@@ -267,7 +272,8 @@ func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, e
 	}
 	base := strings.TrimRight(cfg.UpstreamURL.String(), "/")
 	return &Handler{
-		UpstreamBase: base,
+		UpstreamBase:          base,
+		UpstreamBearerToken:   cfg.UpstreamAPIKey,
 		UpstreamClient: &http.Client{
 			Timeout: cfg.UpstreamTimeout,
 		},

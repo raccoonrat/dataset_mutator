@@ -13,6 +13,9 @@ import (
 type Config struct {
 	ListenAddr         string
 	UpstreamURL        *url.URL
+	// UpstreamAPIKey sent as Authorization: Bearer (OpenAI-compatible: DeepSeek, OpenAI, etc.).
+	// Resolved from GATEWAY_UPSTREAM_API_KEY, else DEEPSEEK_API_KEY, else OPENAI_API_KEY.
+	UpstreamAPIKey     string
 	UpstreamTimeout    time.Duration
 	MaxBodyBytes       int64
 	AsyncLogging       bool
@@ -61,10 +64,18 @@ func FromEnv() (*Config, error) {
 	if expMode == "" {
 		expMode = "default"
 	}
+	upKey := strings.TrimSpace(os.Getenv("GATEWAY_UPSTREAM_API_KEY"))
+	if upKey == "" {
+		upKey = strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	}
+	if upKey == "" {
+		upKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	}
 
 	return &Config{
 		ListenAddr:         listen,
 		UpstreamURL:        u,
+		UpstreamAPIKey:     upKey,
 		UpstreamTimeout:    time.Duration(ms) * time.Millisecond,
 		MaxBodyBytes:       maxBody,
 		AsyncLogging:       async,
