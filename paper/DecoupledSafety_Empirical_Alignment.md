@@ -2,6 +2,9 @@
 
 本文档汇总《Beyond Model Reflection / 解耦安全》**§5 评估协议**与仓库 **`Decoupled-LLM-Gateway`**（含 `paper-eval-2` 评测脚本）的对应关系，以及如何产出**可写入论文主表的 Track A 实证数据**。
 
+**完整流水线（验证逻辑、正式数据获取步骤、数据流图）：**  
+[`Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md`](../Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md)
+
 ---
 
 ## 1. 对齐关系（论文目标 → 代码）
@@ -9,7 +12,7 @@
 | 论文 §5 目标 | 实现位置 |
 |--------------|----------|
 | 防御消融（统一 / 无混淆 / 无诱饵 / 意图-only） | 网关 `X-Gateway-Experiment-Mode`；脚本 `--defenses`：`unified`、`no_obfuscate`、`no_decoy`、`intent_only` |
-| 单 guard、SmoothLLM 式扰动 | `direct_upstream` + `X-Echo-Refuse-Substr`（echo）；`smooth_llm` |
+| 单 guard、SmoothLLM 式扰动 | `direct_upstream`（直连 API 时脚本自动加 Bearer，密钥同 `DEEPSEEK_API_KEY` 等）+ echo 可用 `X-Echo-Refuse-Substr`；`smooth_llm` |
 | 强系统提示 + 单 guard（§5 基线 2） | `strong_system_guard`（请求前插 system；**真实模型**上更有意义） |
 | 语义 RAG、无联合键（§5 基线 3 的客户端代理） | `rag_semantic_only`（固定 exemplar 块，非嵌入检索） |
 | RSR、单轮抽取 ASR / token-F1 | 场景 `refusal_keyword`、`extraction_leak` |
