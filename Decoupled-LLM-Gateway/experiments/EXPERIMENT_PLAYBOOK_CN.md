@@ -92,9 +92,10 @@
 
 在 `Decoupled-LLM-Gateway/` 下：
 
-1. 配置 `GATEWAY_UPSTREAM` 与密钥（`DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `GATEWAY_UPSTREAM_API_KEY`），见 [`README.md`](../README.md)。  
-2. 建议 `GATEWAY_ASYNC_LOG=0`，避免网关 NDJSON 与评测输出混杂。  
-3. 启动网关：`go run ./cmd/gateway` 或构建后 `./bin/gateway`（详见 `RUN_GUIDE.md` §2）。
+1. **在启动网关的同一环境中**配置 `GATEWAY_UPSTREAM` 与密钥（`DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `GATEWAY_UPSTREAM_API_KEY`），见 [`README.md`](../README.md)。  
+2. **切勿混淆**：`run_paper_benchmark.py` 的 **`--upstream-url` 只作用于 `direct_upstream` 防御的直连**；**`unified` 等经网关的防御**使用的是**网关进程**的 `GATEWAY_UPSTREAM`。若未设置 `GATEWAY_UPSTREAM`，网关默认连 **`http://127.0.0.1:9090`（echo）**，echo 未启动则 JSON 里会出现 **502**、`connection refused`。  
+3. 建议 `GATEWAY_ASYNC_LOG=0`，避免网关 NDJSON 与评测输出混杂。  
+4. 启动网关：`export GATEWAY_UPSTREAM=...` 后再 `go run ./cmd/gateway`（详见 `RUN_GUIDE.md` §2.2、§五「常见问题」）。
 
 ### 4.3 从小到大的跑数路径
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -14,10 +16,31 @@ import (
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/policy"
 )
 
+// remoteHTTPSPublicUpstream is true when upstream is https and not loopback (needs Bearer for real APIs).
+func remoteHTTPSPublicUpstream(u *url.URL) bool {
+	if u == nil || u.Scheme != "https" {
+		return false
+	}
+	h := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if h == "" || h == "localhost" {
+		return false
+	}
+	if h == "127.0.0.1" || strings.HasPrefix(h, "127.") {
+		return false
+	}
+	return true
+}
+
 func main() {
 	cfg, err := config.FromEnv()
 	if err != nil {
 		log.Fatal(err)
+	}
+	if remoteHTTPSPublicUpstream(cfg.UpstreamURL) && cfg.UpstreamAPIKey == "" {
+		log.Printf(
+			"warning: upstream is %s but no upstream API key in this process (set GATEWAY_UPSTREAM_API_KEY or DEEPSEEK_API_KEY or OPENAI_API_KEY before starting); requests will not send Authorization: Bearer",
+			cfg.UpstreamURL.String(),
+		)
 	}
 
 	store := policy.NewMemoryStore()

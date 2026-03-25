@@ -120,7 +120,11 @@ export GATEWAY_UPSTREAM_TIMEOUT_MS=120000
 go run ./cmd/gateway
 ```
 
-日志中应出现上游认证已开启（**不会**打印密钥）。若需同步日志顺序调试，可设 `GATEWAY_LOG_AFTER_RESPONSE=0`（见 `README.md` 环境变量表）。
+日志中应出现 **`upstream_auth=bearer`**（**不会**打印密钥）。若出现 **`upstream_auth=off`** 且上游是 `https://api.deepseek.com` 等公网地址，说明**当前进程没有读到** `GATEWAY_UPSTREAM_API_KEY` / `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`——常见于：只在「另一个终端」或 `~/.bashrc` 里写了变量但未 `export`、或启动网关的 shell 与设 key 的 shell 不是同一个。请在该终端执行 `export DEEPSEEK_API_KEY=...`（或 `GATEWAY_UPSTREAM_API_KEY=...`）后**再** `go run ./cmd/gateway`；启动时若仍缺 key，网关会打印一行 **warning** 提示。若需同步日志顺序调试，可设 `GATEWAY_LOG_AFTER_RESPONSE=0`（见 `README.md` 环境变量表）。
+
+**必读（易踩坑）**：`run_paper_benchmark.py` 的 **`--upstream-url` 不会修改网关进程**。它只告诉脚本：当 `defenses` 里包含 **`direct_upstream`** 时，**直连**哪一个 OpenAI 兼容根 URL。  
+凡 **`unified` / `no_obfuscate` / `intent_only` 等经网关的 defense**，请求发往 **`--gateway-url`**，由**已启动的网关**按环境变量 **`GATEWAY_UPSTREAM`** 转发。若未设置 `GATEWAY_UPSTREAM`，网关默认 **`http://127.0.0.1:9090`（echo）**；echo 未启动则返回 **502**，`assistant_text` 里可见 `dial tcp 127.0.0.1:9090: connect: connection refused`。  
+因此：跑真实 API 时，**先**在同一 shell（或 systemd 环境）里 `export GATEWAY_UPSTREAM='https://api.deepseek.com'` 与密钥，**再** `go run ./cmd/gateway`，并与 §2.4 的 `--upstream-url` **保持一致**。
 
 ### 2.3 快速验证（经网关）
 
@@ -134,10 +138,12 @@ curl -sS http://127.0.0.1:8080/v1/chat/completions \
 
 `--openai-model` 写入请求体与 JSON `manifest`，须与服务商模型 id 一致（如 `deepseek-chat`）。
 
-**`--upstream-url`** 必须与网关相同（供 `direct_upstream` 直连对比）；脚本会从环境变量读 Bearer。
+**`--upstream-url`** 必须与 **`GATEWAY_UPSTREAM`（网关实际转发地址）相同**（供 `direct_upstream` 直连对比）；脚本会从环境变量读 Bearer。  
+**仅跑 `unified` 等、不含 `direct_upstream` 时**：也仍须把网关配成真实上游，否则经网关的请求仍会打到默认 **9090**。
 
 ```bash
 export DEEPSEEK_API_KEY='你的密钥'
+export GATEWAY_UPSTREAM='https://api.deepseek.com'   # 与启动网关的终端一致；勿只写在评测命令里
 mkdir -p results
 
 python3 experiments/run_paper_benchmark.py \
@@ -149,6 +155,8 @@ python3 experiments/run_paper_benchmark.py \
   --seed 42 \
   -o results/trackA_core_seed42.json
 ```
+
+上述 `export GATEWAY_UPSTREAM` 是给**与评测同一环境、用于启动网关**时对照用的；若网关在**另一终端**已运行，必须在**那个终端**里先 `export GATEWAY_UPSTREAM=...` 再启动 `go run ./cmd/gateway`，改完后需**重启网关**。
 
 **全量 + 多种子**（耗时长、费用高）示例：
 
@@ -183,6 +191,8 @@ export EVAL_HOSTNAME="$(hostname)"
 - **多种子**：`--seeds 42,43,44` → `runs[]` 与 `aggregate_by_defense`（含有害 RSR、HPM、不当拒绝率等聚合字段）。
 
 ### 2.8 真实上游 + 输出守卫 + 最小场景（端口与环境模板）
+
+**常见错误**：只执行了 `go run ./cmd/gateway`（或 `make run-gateway`），**没有**先 `export GATEWAY_UPSTREAM='https://api.deepseek.com'`，日志里会出现 `upstream http://127.0.0.1:9090`；此时跑 §2.4 / 本节评测会得到 **502**，JSON 中 `assistant_text` 含 **`connection refused`** 连 **9090**。解决办法：按下面「环境变量模板」**重启网关**；或另开终端 **`make run-echo`** 让 9090 有服务（仅本地烟测）。  
 
 在 **真实 OpenAI 兼容上游** 上同时打开 **网关输出守卫** 时：网关会在上游返回 200 后，向 `GATEWAY_OUTPUT_GUARD_URL` 再发一次 `refusal_binary` 请求；若裁判判定 **非拒绝**，可用模板覆盖完成体。**默认**在配置了守卫 URL 时，仅当客户端带 **`X-Gateway-Output-Guard: 1`** 才调用守卫（避免误伤普通流量）。下面用固定端口便于照抄；可按需改端口并全局替换 URL。
 
@@ -336,7 +346,10 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 ## 五、常见问题
 
-**网关 502 / upstream error**  
+**网关 502，且错误里出现 `127.0.0.1:9090`、`connection refused`**  
+经 `unified` 等防御时，流量走网关；网关默认上游为 **echo `9090`**。请 **`export GATEWAY_UPSTREAM=https://api.deepseek.com`（或你的 API）并设置密钥后重启网关**；或启动 `make run-echo`。勿误以为评测脚本里的 **`--upstream-url` 会改变网关上游**——它只影响 **`direct_upstream`** 直连。
+
+**网关 502 / 其它 upstream error**  
 检查 `GATEWAY_UPSTREAM` 是否带协议与主机；DeepSeek 一般为 `https://api.deepseek.com`（无尾部 `/v1` 路径重复问题由网关拼接）。
 
 **direct_upstream 报 401**  
