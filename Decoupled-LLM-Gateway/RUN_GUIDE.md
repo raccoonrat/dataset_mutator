@@ -83,6 +83,17 @@ make paper-eval-check
 # 等价：python3 experiments/run_paper_benchmark.py --self-check
 ```
 
+### 1.5 输出守卫端到端烟测（echo + `judge_service` + 网关）
+
+在**不调用**外部大模型 API 的前提下，验证：`GATEWAY_OUTPUT_GUARD_URL` 指向 `judge_service` 时，无 `X-Gateway-Output-Guard` 则不过守卫；带头则对「非拒绝」回复按模板覆盖；echo 拒答路径下保留上游拒答正文。
+
+```bash
+make smoke-output-guard
+# 等价：bash experiments/scripts/smoke_output_guard.sh
+```
+
+脚本默认用**三个临时端口**（避免占用 8080/9090）；可通过 `SMOKE_ECHO_PORT`、`SMOKE_JUDGE_PORT`、`SMOKE_GW_PORT` 固定端口。通过后，可将同一 `GATEWAY_OUTPUT_GUARD_URL` 配入日常网关，并对评测流量加 `run_paper_benchmark.py --gateway-output-guard`。
+
 ---
 
 ## 二、上游：真实大模型 API（DeepSeek / OpenAI 兼容）

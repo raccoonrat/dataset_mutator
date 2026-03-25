@@ -1,4 +1,4 @@
-.PHONY: test vet bench-obfuscate run-echo run-gateway redis-up paper-eval-check
+.PHONY: test vet bench-obfuscate run-echo run-gateway redis-up paper-eval-check smoke-output-guard
 
 # Go refuses to build when GOPATH and GOMODCACHE are both empty (some shells/IDEs export empty GOPATH).
 ifeq ($(strip $(GOMODCACHE)),)
@@ -35,3 +35,7 @@ redis-up:
 # Paper eval harness sanity (no network; CI uses this)
 paper-eval-check:
 	python3 experiments/run_paper_benchmark.py --self-check
+
+# Echo + heuristic judge + gateway output guard (local TCP; no external LLM API)
+smoke-output-guard:
+	bash experiments/scripts/smoke_output_guard.sh

@@ -34,6 +34,9 @@ jobs:
       - name: Paper benchmark self-check
         run: python3 experiments/run_paper_benchmark.py --self-check
         working-directory: Decoupled-LLM-Gateway
+      - name: Output guard smoke (echo + judge + gateway)
+        run: make smoke-output-guard
+        working-directory: Decoupled-LLM-Gateway
 
   worker-smoke:
     runs-on: ubuntu-latest

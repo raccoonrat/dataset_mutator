@@ -44,6 +44,8 @@
 
 **网关可选输出守卫**（与论文主表无强绑定，属实现增强）：配置 `GATEWAY_OUTPUT_GUARD_URL` 等（见 `README.md` 环境变量表）。**默认**仅当请求含 **`X-Gateway-Output-Guard: 1`** 时才调用守卫；评测脚本对非 `direct_upstream` 路径可加 **`--gateway-output-guard`** 统一带头。**风险**：将「非拒绝」映射为「用模板覆盖」会伤害真实良性对话，生产或 FPR 实验须谨慎或设 `GATEWAY_OUTPUT_GUARD_REQUIRE_HEADER=0` 仅在隔离环境使用。
 
+**本地烟测（无外部 LLM）**：`make smoke-output-guard` 或 `bash experiments/scripts/smoke_output_guard.sh`（echo + 启发式 `judge_service` + 网关），验证三条路径：无头、带头→模板、带头+echo 拒答→保留原文。
+
 ---
 
 ## 三、正式实验 Pipeline（推荐顺序）
