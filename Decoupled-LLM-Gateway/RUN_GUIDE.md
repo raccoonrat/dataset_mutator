@@ -182,6 +182,71 @@ export EVAL_HOSTNAME="$(hostname)"
 - **SmoothLLM 式 K 次采样**：`--smooth-llm-samples K`、`--smooth-llm-sigma σ`，**仅**在 `--defenses` 含 `smooth_llm` 时 K>1 生效；`manifest.smooth_llm_samples_k` / `smooth_llm_sigma` 写入 JSON。
 - **多种子**：`--seeds 42,43,44` → `runs[]` 与 `aggregate_by_defense`（含有害 RSR、HPM、不当拒绝率等聚合字段）。
 
+### 2.8 真实上游 + 输出守卫 + 最小场景（端口与环境模板）
+
+在 **真实 OpenAI 兼容上游** 上同时打开 **网关输出守卫** 时：网关会在上游返回 200 后，向 `GATEWAY_OUTPUT_GUARD_URL` 再发一次 `refusal_binary` 请求；若裁判判定 **非拒绝**，可用模板覆盖完成体。**默认**在配置了守卫 URL 时，仅当客户端带 **`X-Gateway-Output-Guard: 1`** 才调用守卫（避免误伤普通流量）。下面用固定端口便于照抄；可按需改端口并全局替换 URL。
+
+| 角色 | 地址（示例） | 说明 |
+|------|----------------|------|
+| **HTTP 裁判** | `http://127.0.0.1:8765` | `judge_service` 监听；POST 路径任意，示例用 `/judge` |
+| **网关** | `http://127.0.0.1:8080` | 评测脚本 `--gateway-url`、日常 `curl` 只打这里 |
+| **真实上游** | `https://api.deepseek.com` 等 | 无本地端口；由 `GATEWAY_UPSTREAM` 指定 |
+
+**环境变量模板（终端 B：网关）**——在 `Decoupled-LLM-Gateway/` 下执行；将密钥与上游换成你的服务商。
+
+```bash
+# --- DeepSeek 示例 ---
+export DEEPSEEK_API_KEY='你的密钥'
+export GATEWAY_LISTEN=':8080'
+export GATEWAY_UPSTREAM='https://api.deepseek.com'
+export GATEWAY_ASYNC_LOG=0
+export GATEWAY_UPSTREAM_TIMEOUT_MS=120000
+
+# 输出守卫：指向本机 judge_service（须与下方启动端口一致）
+export GATEWAY_OUTPUT_GUARD_URL='http://127.0.0.1:8765/judge'
+export GATEWAY_OUTPUT_GUARD_TIMEOUT_MS='15000'
+export GATEWAY_OUTPUT_GUARD_FAIL_OPEN='1'
+export GATEWAY_OUTPUT_GUARD_TEMPLATE="I'm sorry, I can't help with that."
+# 若裁判需 Bearer：再设 GATEWAY_OUTPUT_GUARD_BEARER
+# 默认：已配置 URL 时要求请求带 X-Gateway-Output-Guard: 1；仅评测机可保持默认
+
+go run ./cmd/gateway
+```
+
+**OpenAI 官方 API 时**将 `GATEWAY_UPSTREAM` 设为 `https://api.openai.com/v1`，并导出 `OPENAI_API_KEY`（或 `GATEWAY_UPSTREAM_API_KEY`），`--openai-model` 与 `curl` 的 `model` 改为例如 `gpt-4o-mini`。
+
+**终端 A — 启裁判（与 `GATEWAY_OUTPUT_GUARD_URL` 同机同端口）：**
+
+```bash
+cd Decoupled-LLM-Gateway
+JUDGE_BACKEND=heuristic python3 experiments/judge_service/server.py --host 127.0.0.1 --port 8765
+# 需要更强判定时可换 openai_moderation / chat_completion（见 README「论文实验数据」）
+```
+
+**终端 B — 启网关**：使用上一段 env 后 `go run ./cmd/gateway`（或 `make run-gateway`，但须在命令前 **额外 export** `GATEWAY_OUTPUT_GUARD_*`，因默认 Makefile 未带守卫）。
+
+**终端 C — 最小评测（经网关 + 自动加输出守卫头）**：
+
+`--gateway-output-guard` 会为 **非 `direct_upstream`** 的 defense 附加 `X-Gateway-Output-Guard: 1`。最小场景与 §2.4 一致（不含 `direct_upstream`，避免与「仅经网关才带头」混淆）。
+
+```bash
+cd Decoupled-LLM-Gateway
+export DEEPSEEK_API_KEY='你的密钥'
+mkdir -p results
+
+python3 experiments/run_paper_benchmark.py \
+  --gateway-url http://127.0.0.1:8080 \
+  --upstream-url https://api.deepseek.com \
+  --openai-model deepseek-chat \
+  --defenses unified,no_obfuscate,no_decoy,intent_only \
+  --scenarios benign_baseline,refusal_keyword,extraction_leak \
+  --gateway-output-guard \
+  --seed 42 \
+  -o results/trackA_core_guard_seed42.json
+```
+
+**说明**：`manifest.gateway_output_guard_header` 为 `true`。守卫与启发式裁判可能对 **良性提示** 给出「非拒绝」，从而触发模板覆盖——这是该机制的预期语义；若仅想测有害侧，可缩小 `--scenarios` 或暂时去掉 `benign_baseline`，并确保使用场景符合合规与费用预期。本地链路可先跑 **`make smoke-output-guard`**（§1.5）再换真实密钥。
+
 ---
 
 ## 三、两种模式对照
