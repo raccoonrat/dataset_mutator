@@ -362,6 +362,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `experiments/data/harmful_prompts_trackA_en.txt` | 有害单轮 RSR 默认集（AdvBench 同型） |
 | `experiments/scripts/fetch_advbench_subset.py` | 可选：从公开 CSV 拉取 AdvBench 前 N 条 |
 | `experiments/scripts/smoke_output_guard.sh` | 可选：echo + `judge_service` + 网关输出守卫端到端烟测（`make smoke-output-guard`） |
+| `experiments/scripts/run_real_upstream_guard_compare.sh` | 可选：真实上游上两次评测（无/有 `--gateway-output-guard`），见 `RUN_GUIDE.md` §2.9 |
 | `experiments/examples/deepseek_sdk_smoke.py` | 可选：直连 DeepSeek（`pip install openai`） |
 | `docker-compose.yml` | 本地 Redis |
 | `scripts/m3_demo.sh` | M3 演示步骤提示 |

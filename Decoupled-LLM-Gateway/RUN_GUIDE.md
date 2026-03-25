@@ -247,6 +247,69 @@ python3 experiments/run_paper_benchmark.py \
 
 **说明**：`manifest.gateway_output_guard_header` 为 `true`。守卫与启发式裁判可能对 **良性提示** 给出「非拒绝」，从而触发模板覆盖——这是该机制的预期语义；若仅想测有害侧，可缩小 `--scenarios` 或暂时去掉 `benign_baseline`，并确保使用场景符合合规与费用预期。本地链路可先跑 **`make smoke-output-guard`**（§1.5）再换真实密钥。
 
+### 2.9 真实上游小样本对比（`harmful_rsr_suite` + `benign_fpr_suite`，有/无输出守卫头）
+
+在 **§2.8** 已起 **裁判 `8765` + 带 `GATEWAY_OUTPUT_GUARD_URL` 的网关** 的前提下，用同一上游与同一模型做两次评测：**仅差异**为是否加 **`--gateway-output-guard`**。用于核对 `manifest`、粗看 `per_prompt` 与费用可控。
+
+**条数上限**：`--max-harmful-prompts N`、`--max-benign-fpr-prompts M` 只截取提示文件**前 N / M 条**（仍计入 `manifest.max_harmful_prompts` / `max_benign_fpr_prompts`）；**其它场景**（若使用 `--suite full`）不受这两个参数影响，仅 **`harmful_rsr_suite` / `benign_fpr_suite`** 被截断。
+
+**终端 C — 先无守卫头（基线）再带守卫头**（DeepSeek 示例；`UPSTREAM` 与 §2.4 一致）：
+
+```bash
+cd Decoupled-LLM-Gateway
+export DEEPSEEK_API_KEY='你的密钥'
+mkdir -p results
+
+BASE=( python3 experiments/run_paper_benchmark.py
+  --gateway-url http://127.0.0.1:8080
+  --upstream-url https://api.deepseek.com
+  --openai-model deepseek-chat
+  --defenses unified,no_obfuscate,no_decoy,intent_only
+  --scenarios harmful_rsr_suite,benign_fpr_suite
+  --max-harmful-prompts 3
+  --max-benign-fpr-prompts 4
+  --seed 42
+)
+
+"${BASE[@]}" -o results/real_smoke_noguard.json
+"${BASE[@]}" --gateway-output-guard -o results/real_smoke_guard.json
+```
+
+**核对 manifest**（应仅有 `gateway_output_guard_header` 等预期字段差异）：
+
+```bash
+jq '.manifest | {gateway_output_guard_header, max_harmful_prompts, max_benign_fpr_prompts, protocol_version, openai_model_field}' \
+  results/real_smoke_noguard.json results/real_smoke_guard.json
+diff -u <(jq '.manifest | del(.git_sha, .hostname)' results/real_smoke_noguard.json) \
+        <(jq '.manifest | del(.git_sha, .hostname)' results/real_smoke_guard.json) || true
+```
+
+**主观观感**：对每条 defense × 场景，查看 `runs[0].results[]` 中 `scenario_id` 为 `harmful_rsr_suite` / `benign_fpr_suite` 的 **`per_prompt`**（`rsr` / `rsr_false_positive`、必要时对照助手正文是否被模板替换）。带守卫时，经网关且模型未形成「拒绝形」回复的完成体可能被 **`GATEWAY_OUTPUT_GUARD_TEMPLATE`** 覆盖，有害集上 RSR 可能**升高**，良性集上不当拒绝率也可能变化——需结合裁判与业务预期解读。
+
+**一键脚本**（与上面等价；需已配置密钥且网关/裁判已就绪）：
+
+```bash
+bash experiments/scripts/run_real_upstream_guard_compare.sh
+# 可选：MAX_HARMFUL=2 MAX_BENIGN_FPR=3 OPENAI_MODEL=gpt-4o-mini UPSTREAM_URL=https://api.openai.com/v1 ...
+```
+
+**`--suite full` + 小样本有害/良性**：在仍要跑全场景但控制这两类费用时，例如：
+
+```bash
+python3 experiments/run_paper_benchmark.py --suite full \
+  --gateway-url http://127.0.0.1:8080 \
+  --upstream-url https://api.deepseek.com \
+  --openai-model deepseek-chat \
+  --defenses unified,no_obfuscate,no_decoy,intent_only,direct_upstream,smooth_llm \
+  --max-harmful-prompts 2 \
+  --max-benign-fpr-prompts 3 \
+  --gateway-output-guard \
+  --seed 42 \
+  -o results/trackA_full_capped_guard.json
+```
+
+`direct_upstream` **不会**带 `X-Gateway-Output-Guard`，可与经网关防御对照。
+
 ---
 
 ## 三、两种模式对照

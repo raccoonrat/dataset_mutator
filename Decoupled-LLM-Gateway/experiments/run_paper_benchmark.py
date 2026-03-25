@@ -29,6 +29,9 @@ independent space jitter and majority-vote refusals (RSR scenarios); extraction 
 Optional gateway output-guard opt-in: --gateway-output-guard adds X-Gateway-Output-Guard: 1 for all
 non-direct_upstream defenses (requires gateway GATEWAY_OUTPUT_GUARD_URL etc.; see README).
 
+Cost control: --max-harmful-prompts N and --max-benign-fpr-prompts M cap only harmful_rsr_suite and
+benign_fpr_suite line counts; recorded in manifest.
+
 Real LLM: gateway uses DEEPSEEK_API_KEY / GATEWAY_UPSTREAM_API_KEY / OPENAI_API_KEY + GATEWAY_UPSTREAM.
 For defense direct_upstream, the script adds the same Bearer to urllib requests to --upstream-url.
 Pass --openai-model deepseek-chat (or gpt-4o-mini) for the JSON body and manifest.
@@ -612,9 +615,12 @@ def run_harmful_rsr_suite(
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
+    max_prompts: Optional[int] = None,
 ) -> Dict[str, Any]:
     """RSR on a file of harmful single-turn goals (AdvBench-style); complements refusal_keyword."""
     lines = _read_prompt_lines(prompts_path)
+    if max_prompts is not None:
+        lines = lines[: max(0, max_prompts)]
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     refused = 0
@@ -653,7 +659,7 @@ def run_harmful_rsr_suite(
         )
 
     n = max(len(lines), 1)
-    return {
+    out_h: Dict[str, Any] = {
         "scenario_id": "harmful_rsr_suite",
         "defense_baseline": defense,
         "track": track,
@@ -666,6 +672,9 @@ def run_harmful_rsr_suite(
         "per_prompt": details,
         "notes": "§5 RSR on harmful prompt file; expand via fetch_advbench_subset.py for publication scale",
     }
+    if max_prompts is not None:
+        out_h["harmful_prompts_cap"] = max_prompts
+    return out_h
 
 
 def run_hpm_proxy_suite(
@@ -748,8 +757,11 @@ def run_benign_fpr_suite(
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
+    max_prompts: Optional[int] = None,
 ) -> Dict[str, Any]:
     lines = _read_prompt_lines(prompts_path)
+    if max_prompts is not None:
+        lines = lines[: max(0, max_prompts)]
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     improper = 0
@@ -787,7 +799,7 @@ def run_benign_fpr_suite(
         )
 
     rate = improper / max(len(lines), 1)
-    return {
+    out_b: Dict[str, Any] = {
         "scenario_id": "benign_fpr_suite",
         "defense_baseline": defense,
         "track": track,
@@ -800,6 +812,9 @@ def run_benign_fpr_suite(
         "per_prompt": details,
         "notes": "§5 judge FPR proxy on held-out benign lines; lower improper_refusal_rate better",
     }
+    if max_prompts is not None:
+        out_b["benign_fpr_prompts_cap"] = max_prompts
+    return out_b
 
 
 def _one_stress_call(
@@ -910,6 +925,8 @@ def run_matrix(
     judge_cfg: JudgeConfig,
     smooth_cfg: SmoothLLMConfig,
     gateway_output_guard: bool = False,
+    max_harmful_prompts: Optional[int] = None,
+    max_benign_fpr_prompts: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     multi = "multi_round_extraction" in scenarios
@@ -980,6 +997,7 @@ def run_matrix(
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
+                        max_prompts=max_benign_fpr_prompts,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1016,6 +1034,7 @@ def run_matrix(
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
+                        max_prompts=max_harmful_prompts,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1176,6 +1195,18 @@ def main() -> None:
         default=str(Path(__file__).resolve().parent / "data" / "harmful_prompts_trackA_en.txt"),
         help="Harmful single-turn goals for harmful_rsr_suite (AdvBench-style; see fetch_advbench_subset.py)",
     )
+    ap.add_argument(
+        "--max-harmful-prompts",
+        type=int,
+        default=None,
+        help="use only first N non-comment lines for harmful_rsr_suite (cost / smoke)",
+    )
+    ap.add_argument(
+        "--max-benign-fpr-prompts",
+        type=int,
+        default=None,
+        help="use only first N non-comment lines for benign_fpr_suite (cost / smoke)",
+    )
     ap.add_argument("--stress-workers", type=int, default=8)
     ap.add_argument("--stress-requests", type=int, default=32)
     ap.add_argument("--benign-probes", type=int, default=12)
@@ -1231,6 +1262,8 @@ def main() -> None:
         "smooth_llm_samples_k": smooth_cfg.samples_k,
         "smooth_llm_sigma": smooth_cfg.sigma,
         "gateway_output_guard_header": bool(args.gateway_output_guard),
+        "max_harmful_prompts": args.max_harmful_prompts,
+        "max_benign_fpr_prompts": args.max_benign_fpr_prompts,
         "git_sha": os.environ.get("GIT_SHA", "").strip(),
         "hostname": os.environ.get("EVAL_HOSTNAME", "").strip(),
     }
@@ -1259,6 +1292,8 @@ def main() -> None:
             judge_cfg=judge_cfg,
             smooth_cfg=smooth_cfg,
             gateway_output_guard=args.gateway_output_guard,
+            max_harmful_prompts=args.max_harmful_prompts,
+            max_benign_fpr_prompts=args.max_benign_fpr_prompts,
         )
         all_runs.append({"seed": sd, "results": results})
 

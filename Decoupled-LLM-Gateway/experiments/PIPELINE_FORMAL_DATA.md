@@ -46,6 +46,8 @@
 
 **本地烟测（无外部 LLM）**：`make smoke-output-guard` 或 `bash experiments/scripts/smoke_output_guard.sh`（echo + 启发式 `judge_service` + 网关），验证三条路径：无头、带头→模板、带头+echo 拒答→保留原文。
 
+**真实上游 + 守卫 + 小样本 A/B**：`--max-harmful-prompts` / `--max-benign-fpr-prompts` 控制费用；同一命令加/不加 `--gateway-output-guard` 各跑一次，核对 `manifest.gateway_output_guard_header` 与 `per_prompt`。见 `RUN_GUIDE.md` **§2.9** 与 `experiments/scripts/run_real_upstream_guard_compare.sh`。
+
 ---
 
 ## 三、正式实验 Pipeline（推荐顺序）

@@ -31,6 +31,11 @@
       "JUDGE_CHAT_PROMPT_TEMPLATE": "optional; must include {user} and {assistant}; model should answer YES or NO"
     }
   },
+  "prompt_caps": {
+    "cli": ["--max-harmful-prompts", "--max-benign-fpr-prompts"],
+    "manifest_keys": ["max_harmful_prompts", "max_benign_fpr_prompts"],
+    "scenarios_affected": ["harmful_rsr_suite", "benign_fpr_suite"]
+  },
   "gateway_output_guard": {
     "cli_flag": "--gateway-output-guard",
     "manifest_key": "gateway_output_guard_header",
