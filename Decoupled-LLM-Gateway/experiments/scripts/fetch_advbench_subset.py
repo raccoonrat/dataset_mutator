@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fetch the first N goals from the public AdvBench harmful_behaviors CSV for paper-eval-3 RSR suites.
+Fetch the first N goals from the public AdvBench harmful_behaviors CSV for paper-eval RSR suites.
 
 Source: llm-attacks/llm-attacks (harmful_behaviors.csv). One goal per line written to stdout or -o.
 

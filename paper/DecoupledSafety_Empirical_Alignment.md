@@ -1,6 +1,6 @@
 # 论文实验目标与 Decoupled-LLM-Gateway 对齐说明
 
-本文档汇总《Beyond Model Reflection / 解耦安全》**§5 评估协议**与仓库 **`Decoupled-LLM-Gateway`**（含 `paper-eval-3` 评测脚本）的对应关系，以及如何产出**可写入论文主表的 Track A 实证数据**。
+本文档汇总《Beyond Model Reflection / 解耦安全》**§5 评估协议**与仓库 **`Decoupled-LLM-Gateway`**（含 `paper-eval-4` 评测脚本）的对应关系，以及如何产出**可写入论文主表的 Track A 实证数据**。
 
 **完整流水线（验证逻辑、正式数据获取步骤、数据流图）：**  
 [`Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md`](../Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md)
@@ -52,7 +52,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 5. **论文引用**：在正文或附录中引用 `results/paper_eval_trackA.json` 的 **`manifest`**（协议版本、模型字段、URL 等）与 **`runs[*].results`**；并与论文附录表（评估矩阵 / 复现清单）中的 **模型 ID、随机种子、Track A** 声明一致。
 
-6. **协议版本**：当前 harness 自述为 **`paper-eval-3`**（见脚本 docstring 与 JSON `manifest.protocol_version`）。
+6. **协议版本**：当前 harness 自述为 **`paper-eval-4`**（见脚本 docstring 与 JSON `manifest.protocol_version`）；含 **`judge_service/server.py`** 与 **`--smooth-llm-samples`**。
 
 ---
 
@@ -62,8 +62,9 @@ python3 experiments/run_paper_benchmark.py --suite full \
 |------|------|
 | `paper/BeyondModelReflection_DecoupledSafety.tex` | 摘要中区分文献数字与 **Track A 可复现主指标**；新增 **「Reference Implementation and Empirical Validation」**（`sec:eval-artifact`）；可用性段提及 `Decoupled-LLM-Gateway/` |
 | `paper/BeyondModelReflection_DecoupledSafety_CN.tex` | 同上中文版 |
-| `Decoupled-LLM-Gateway/README.md` | 「论文实验数据」节与 `paper-eval-3`、场景表、真实 LLM 命令示例 |
-| `Decoupled-LLM-Gateway/experiments/run_paper_benchmark.py` | `paper-eval-3`：有害 RSR 套件、HTTP 裁判、多轮抽取、HPM 代理、良性 FPR、Decoy-DoS/SLA、多种子聚合 |
+| `Decoupled-LLM-Gateway/README.md` | 「论文实验数据」节与 `paper-eval-4`、场景表、真实 LLM 命令示例 |
+| `Decoupled-LLM-Gateway/experiments/run_paper_benchmark.py` | `paper-eval-4`：有害 RSR、HTTP 裁判、SmoothLLM K 采样、多轮、HPM 代理、良性 FPR、Decoy-DoS/SLA、多种子聚合 |
+| `Decoupled-LLM-Gateway/experiments/judge_service/server.py` | 本地 HTTP 裁判（启发式 / OpenAI moderation） |
 | `Decoupled-LLM-Gateway/experiments/data/benign_prompts_en.txt` | 默认良性提示列表（可替换为更大 held-out 集） |
 | CI | `make paper-eval-check` / `python3 experiments/run_paper_benchmark.py --self-check` |
 
@@ -93,4 +94,4 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 *文档与仓库实现同步维护；若协议版本升级，请同时更新 `PROTOCOL_VERSION` 与本文件中的版本号说明。*
 
-**历史**：仓库内部分 `results/*.json` 仍为 `paper-eval-2` 留存，新跑数请以 `manifest.protocol_version == paper-eval-3` 为准。
+**历史**：仓库内部分 `results/*.json` 仍为 `paper-eval-2` / `paper-eval-3` 留存，新跑数请以 `manifest.protocol_version == paper-eval-4` 为准。

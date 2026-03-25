@@ -238,9 +238,13 @@ flowchart LR
 
 ---
 
-## 论文实验数据（Track A，`paper-eval-3`）
+## 论文实验数据（Track A，`paper-eval-4`）
 
-与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。`paper-eval-3` 相对 `paper-eval-2`：新增 **标准有害单轮集** `harmful_rsr_suite`、**可选 HTTP 裁判**（`--judge-mode http` + `PAPER_EVAL_JUDGE_URL`），并将拒绝判定统一经 `JudgeConfig`（启发式与 HTTP 共用代码路径）。
+与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。
+
+**`paper-eval-4`（相对 v3）**：`smooth_llm` 防御下支持 **`--smooth-llm-samples K`**（ICLR’24 SmoothLLM 式：每轮 K 次随机空白扰动 + 独立补全；RSR 类指标**多数票**，抽取类取 **max F1 / any leak**）；`manifest` 含 `smooth_llm_samples_k` / `smooth_llm_sigma`。配套 **HTTP 裁判微服务** `experiments/judge_service/server.py`（stdlib，无额外依赖），供 `--judge-mode http` 与 `PAPER_EVAL_JUDGE_URL` 使用；`JUDGE_BACKEND=openai_moderation` 时可用 OpenAI Moderations API 辅助判定（需 `OPENAI_API_KEY`）。
+
+v3 已含：标准有害单轮集 `harmful_rsr_suite`、HTTP 裁判协议、`JudgeConfig` 统一路径。
 
 ### 防御基线（`--defenses` 逗号分隔）
 
@@ -270,6 +274,17 @@ flowchart LR
 | Decoy-DoS / SLA 代理 | `decoy_dos_sla` | 并发泄漏请求后 `benign_success_rate`, `benign_latency_p95_ms` |
 
 **裁判**：默认 `--judge-mode heuristic`（关键词）。主表审计可改用 `--judge-mode http` 并设置 `PAPER_EVAL_JUDGE_URL`（或 `--judge-url`）：POST JSON `{"task":"refusal_binary","user":"…","assistant":"…"}`，响应需含 `is_refusal` 或 `refusal`（bool）。可选 `PAPER_EVAL_JUDGE_BEARER`。`manifest.judge_mode` 写入 JSON。
+
+**本地裁判服务**（与脚本契约一致）：
+
+```bash
+JUDGE_BACKEND=heuristic python3 experiments/judge_service/server.py --port 8765
+# 另开终端：
+export PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/judge
+python3 experiments/run_paper_benchmark.py --judge-mode http ... 
+```
+
+**SmoothLLM 采样**：`--smooth-llm-samples 5 --smooth-llm-sigma 3` 仅在 **`--defenses` 含 `smooth_llm`** 时生效；其他防御下 K 视为 1。自检：`python3 experiments/judge_service/server.py --self-check`（已由 `make paper-eval-check` 间接调用）。
 
 **真实 LLM**：将网关指向上游，例如 `export OPENAI_API_KEY=...` 且 `GATEWAY_UPSTREAM=https://api.openai.com/v1`，并传入 **`--openai-model gpt-4o-mini`**（写入 JSON `manifest` 与请求体 `model` 字段）。
 
@@ -326,7 +341,8 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `internal/policy/redis_refresh.go` | M3：从 Redis Hash 刷新策略 |
 | `worker/main.py` | M3：Redis 消费组 + stdin 回退 |
 | `worker/requirements.txt` | Python 依赖（redis-py） |
-| `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-3` JSON 基准（Track A） |
+| `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-4` JSON 基准（Track A） |
+| `experiments/judge_service/server.py` | HTTP 拒绝判定微服务（启发式 / OpenAI moderation） |
 | `experiments/benchmark_spec_trackA.json` | Track A 指标与场景机器可读清单 |
 | `experiments/data/benign_prompts_en.txt` | 良性 FPR 套件默认提示列表 |
 | `experiments/data/harmful_prompts_trackA_en.txt` | 有害单轮 RSR 默认集（AdvBench 同型） |

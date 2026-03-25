@@ -10,7 +10,7 @@
 | **策略热更新** | `internal/policy/redis_refresh.go` | 周期从 Redis Hash 合并规则到 `MemoryStore`。 |
 | **网关热路径** | `internal/gateway/gateway.go` | 读 body → `PrepareRequestBody`（混淆快照 + 上游体）→ 策略匹配 → 上游 → 日志 Sink；实验头 `X-Gateway-Experiment-Mode` 控制消融。 |
 | **异步闭环（M3）** | `worker/main.py` + `internal/logsink/redis_stream.go` | 消费网关事件；**诱饵泄露**（输出含 `decoy-`）→ 生成 `PolicyRule` → `HSET` 回 Redis；网关侧下次命中则降级。 |
-| **评测代理** | `experiments/run_paper_benchmark.py` | 协议 **`paper-eval-3`**：有害单轮 RSR 文件、`harmful_rsr_suite`、可选 HTTP 裁判、HPM 代理、RSR / 抽取 F1、多轮、良性 FPR、并发 stress+SLA；`smooth_llm` 为客户端随机空白扰动（SmoothLLM **思想**的轻量复现）。 |
+| **评测代理** | `experiments/run_paper_benchmark.py` | 协议 **`paper-eval-4`**：同上 + `smooth_llm` 下 **K 次扰动多数票**（`--smooth-llm-samples`）；`experiments/judge_service/server.py` 为可选 HTTP 裁判实现。 |
 | **回声上游** | `cmd/echo-llm` | 可控 `X-Echo-*` 行为，用于烟测与 CI。 |
 
 ## 二、近年顶会/顶刊相关方向（与实现对齐或可作补充）
@@ -27,10 +27,9 @@
 
 ## 三、建议的后续落地（按工程量排序）
 
-1. **已完成（本提交）**：`structured_wrap` + 文档；`run_paper_benchmark.py` 增加 `structured_wrap` defense。  
-2. **中小**：在脚本中实现 **k 次采样 + 多数票** 的 SmoothLLM 式聚合（仅 echo/小模型试跑，成本敏感）。  
-3. **较大**：可选 `internal/classifier/` 接口 + 配置化 HTTP 调用 Llama-Guard 类模型，与 `Policy` 链式组合。  
-4. **研究向**：Perplexity/长度异常等 **轻量启发式** 作为 fast-reject（注意误杀与多语言）。
+1. **已完成**：`structured_wrap`；**paper-eval-4**：`smooth_llm` 下 **`--smooth-llm-samples K`**（多数票 RSR / 抽取 max-F1）、`experiments/judge_service/server.py`（HTTP 裁判）。  
+2. **较大**：可选 `internal/classifier/` 接口 + 配置化 HTTP 调用 Llama-Guard 类模型，与 `Policy` 链式组合。  
+3. **研究向**：Perplexity/长度异常等 **轻量启发式** 作为 fast-reject（注意误杀与多语言）。
 
 ## 四、引用写法建议
 

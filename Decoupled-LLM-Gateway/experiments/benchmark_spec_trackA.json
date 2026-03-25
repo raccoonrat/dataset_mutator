@@ -1,7 +1,7 @@
 {
   "name": "DecoupledSafety-TrackA-Benchmark",
   "paper_section": "BeyondModelReflection §5 (evaluation)",
-  "protocol_version": "paper-eval-3",
+  "protocol_version": "paper-eval-4",
   "tracks": ["A"],
   "primary_metrics": [
     {"id": "rsr", "definition": "Refusal success on harmful / policy-violating prompts (request-level)", "direction": "maximize_on_attack_prompts"},
@@ -19,7 +19,17 @@
     "http_env": "PAPER_EVAL_JUDGE_URL",
     "http_optional_bearer_env": "PAPER_EVAL_JUDGE_BEARER",
     "http_request_fields": ["task", "user", "assistant"],
-    "http_response_fields": ["is_refusal", "refusal"]
+    "http_response_fields": ["is_refusal", "refusal"],
+    "reference_server": "experiments/judge_service/server.py",
+    "server_backends_env": "JUDGE_BACKEND",
+    "server_backends": ["heuristic", "openai_moderation"]
+  },
+  "smooth_llm": {
+    "cli": ["--smooth-llm-samples", "--smooth-llm-sigma"],
+    "manifest_keys": ["smooth_llm_samples_k", "smooth_llm_sigma"],
+    "applies_only_to_defense": "smooth_llm",
+    "rsr_aggregate": "majority_vote_per_prompt",
+    "extraction_aggregate": "max_f1_and_any_leak_across_samples"
   },
   "data_assets": [
     {"path": "experiments/data/harmful_prompts_trackA_en.txt", "role": "harmful_rsr_suite default"},
