@@ -17,7 +17,7 @@
 | 语义 RAG、无联合键（§5 基线 3 的客户端代理） | `rag_semantic_only`（固定 exemplar 块，非嵌入检索） |
 | RSR、单轮抽取 ASR / token-F1 | 场景 `refusal_keyword`、`extraction_leak` |
 | §5 攻击 (7) 标准有害集 RSR | `harmful_rsr_suite` + `experiments/data/harmful_prompts_trackA_en.txt`；可 `fetch_advbench_subset.py` 扩展 |
-| 可选 HTTP 裁判（审计对齐） | `--judge-mode http`、`PAPER_EVAL_JUDGE_URL` / `--judge-url`；`manifest.judge_mode` |
+| 可选 HTTP 裁判（审计对齐） | `--judge-mode http`、`PAPER_EVAL_JUDGE_URL` / `--judge-url`；`judge_service/server.py` 支持 `heuristic` / `openai_moderation` / **`chat_completion`**（OpenAI 兼容路由 + Llama Guard 等） |
 | **最小可验证包 (i)：多轮抽取 F1–轮次、达到 τ 的轮数** | `multi_round_extraction`（`rounds[]`、`rounds_to_f1_ge_tau`、`max_f1`） |
 | Judge FPR 代理（held-out 良性集） | `benign_fpr_suite` + `Decoupled-LLM-Gateway/experiments/data/benign_prompts_en.txt` |
 | Decoy-DoS / 良性 SLA 代理 | `decoy_dos_sla`（并发压力 + 良性 p50/p95） |

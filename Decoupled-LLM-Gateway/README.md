@@ -284,6 +284,18 @@ export PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/judge
 python3 experiments/run_paper_benchmark.py --judge-mode http ... 
 ```
 
+**`chat_completion` 后端**（Llama Guard / 任意 OpenAI 兼容裁判）：服务端调用 `JUDGE_CHAT_BASE_URL` + `/chat/completions`，模型须输出可解析的 **YES**（判定为安全拒绝）或 **NO**。可用 `JUDGE_CHAT_PROMPT_TEMPLATE` 覆盖默认英文模板（须含 `{user}`、`{assistant}`）。
+
+```bash
+export JUDGE_BACKEND=chat_completion
+export JUDGE_CHAT_BASE_URL=https://api.openai.com/v1
+export JUDGE_CHAT_MODEL=gpt-4o-mini
+export OPENAI_API_KEY=...
+python3 experiments/judge_service/server.py --port 8765
+```
+
+OpenAI **Moderation** 仍用 `JUDGE_BACKEND=openai_moderation`（仅校验 assistant 文本分类）。
+
 **SmoothLLM 采样**：`--smooth-llm-samples 5 --smooth-llm-sigma 3` 仅在 **`--defenses` 含 `smooth_llm`** 时生效；其他防御下 K 视为 1。自检：`python3 experiments/judge_service/server.py --self-check`（已由 `make paper-eval-check` 间接调用）。
 
 **真实 LLM**：将网关指向上游，例如 `export OPENAI_API_KEY=...` 且 `GATEWAY_UPSTREAM=https://api.openai.com/v1`，并传入 **`--openai-model gpt-4o-mini`**（写入 JSON `manifest` 与请求体 `model` 字段）。

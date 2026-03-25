@@ -22,7 +22,14 @@
     "http_response_fields": ["is_refusal", "refusal"],
     "reference_server": "experiments/judge_service/server.py",
     "server_backends_env": "JUDGE_BACKEND",
-    "server_backends": ["heuristic", "openai_moderation"]
+    "server_backends": ["heuristic", "openai_moderation", "chat_completion"],
+    "chat_completion_env": {
+      "JUDGE_CHAT_BASE_URL": "OpenAI-compatible base, e.g. https://api.openai.com/v1",
+      "JUDGE_CHAT_MODEL": "e.g. gpt-4o-mini or Llama-Guard served via vLLM",
+      "JUDGE_CHAT_API_KEY": "optional if OPENAI_API_KEY set",
+      "JUDGE_CHAT_TIMEOUT": "seconds, default 60",
+      "JUDGE_CHAT_PROMPT_TEMPLATE": "optional; must include {user} and {assistant}; model should answer YES or NO"
+    }
   },
   "smooth_llm": {
     "cli": ["--smooth-llm-samples", "--smooth-llm-sigma"],
