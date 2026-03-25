@@ -10,7 +10,7 @@
 | **策略热更新** | `internal/policy/redis_refresh.go` | 周期从 Redis Hash 合并规则到 `MemoryStore`。 |
 | **网关热路径** | `internal/gateway/gateway.go` | 读 body → `PrepareRequestBody`（混淆快照 + 上游体）→ 策略匹配 → 上游 → 日志 Sink；实验头 `X-Gateway-Experiment-Mode` 控制消融。 |
 | **异步闭环（M3）** | `worker/main.py` + `internal/logsink/redis_stream.go` | 消费网关事件；**诱饵泄露**（输出含 `decoy-`）→ 生成 `PolicyRule` → `HSET` 回 Redis；网关侧下次命中则降级。 |
-| **评测代理** | `experiments/run_paper_benchmark.py` | RSR / 抽取 F1、多轮、良性 FPR 列表、并发 stress+SLA；`smooth_llm` 为客户端随机空白扰动（SmoothLLM **思想**的轻量复现）。 |
+| **评测代理** | `experiments/run_paper_benchmark.py` | 协议 **`paper-eval-3`**：有害单轮 RSR 文件、`harmful_rsr_suite`、可选 HTTP 裁判、HPM 代理、RSR / 抽取 F1、多轮、良性 FPR、并发 stress+SLA；`smooth_llm` 为客户端随机空白扰动（SmoothLLM **思想**的轻量复现）。 |
 | **回声上游** | `cmd/echo-llm` | 可控 `X-Echo-*` 行为，用于烟测与 CI。 |
 
 ## 二、近年顶会/顶刊相关方向（与实现对齐或可作补充）

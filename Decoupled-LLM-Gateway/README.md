@@ -238,9 +238,9 @@ flowchart LR
 
 ---
 
-## 论文实验数据（Track A，`paper-eval-2`）
+## 论文实验数据（Track A，`paper-eval-3`）
 
-与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。
+与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。`paper-eval-3` 相对 `paper-eval-2`：新增 **标准有害单轮集** `harmful_rsr_suite`、**可选 HTTP 裁判**（`--judge-mode http` + `PAPER_EVAL_JUDGE_URL`），并将拒绝判定统一经 `JudgeConfig`（启发式与 HTTP 共用代码路径）。
 
 ### 防御基线（`--defenses` 逗号分隔）
 
@@ -256,20 +256,24 @@ flowchart LR
 | 语义 RAG、无联合键 | `rag_semantic_only`（固定 exemplar 块 — **客户端代理**） |
 | SmoothLLM 式扰动 | `smooth_llm` |
 
-### 场景（`--scenarios`；`--suite full` 自动追加三项）
+### 场景（`--scenarios`；`--suite full` 自动追加）
 
 | 论文对应 | `scenario_id` | 输出要点 |
 |----------|-----------------|----------|
 | RSR / 有害拒绝 | `refusal_keyword` | `rsr` |
+| §5 攻击 (7) 标准有害集 RSR | `harmful_rsr_suite` | `harmful_rsr_rate`，默认 `experiments/data/harmful_prompts_trackA_en.txt`；可 `experiments/scripts/fetch_advbench_subset.py` 拉取 AdvBench 子集 |
 | 单轮抽取 ASR、F1 | `extraction_leak` | `asr_extraction`, `extraction_f1` |
 | 良性效用 / FPR 代理 | `benign_baseline` | `rsr` 应为 false |
 | 最小实验包 (i) 多轮经济 | `multi_round_extraction` | `rounds[]`, `max_f1`, `rounds_to_f1_ge_tau` |
+| HPM 压力代理 | `hpm_proxy` | `hpm_rsr_rate`，默认 `experiments/data/hpm_proxy_prompts_en.txt` |
 | Judge FPR 代理 | `benign_fpr_suite` | `improper_refusal_rate`，默认读 `experiments/data/benign_prompts_en.txt` |
 | Decoy-DoS / SLA 代理 | `decoy_dos_sla` | 并发泄漏请求后 `benign_success_rate`, `benign_latency_p95_ms` |
 
+**裁判**：默认 `--judge-mode heuristic`（关键词）。主表审计可改用 `--judge-mode http` 并设置 `PAPER_EVAL_JUDGE_URL`（或 `--judge-url`）：POST JSON `{"task":"refusal_binary","user":"…","assistant":"…"}`，响应需含 `is_refusal` 或 `refusal`（bool）。可选 `PAPER_EVAL_JUDGE_BEARER`。`manifest.judge_mode` 写入 JSON。
+
 **真实 LLM**：将网关指向上游，例如 `export OPENAI_API_KEY=...` 且 `GATEWAY_UPSTREAM=https://api.openai.com/v1`，并传入 **`--openai-model gpt-4o-mini`**（写入 JSON `manifest` 与请求体 `model` 字段）。
 
-**多种子**：`--seeds 42,43,44,45,46` 生成多轮 `runs`，并附带 `aggregate_extraction_f1`（按防御对 `extraction_leak` 的 F1 均值）。
+**多种子**：`--seeds 42,43,44,45,46` 生成多轮 `runs`，并附带 `aggregate_by_defense`（含 `harmful_rsr_rate_mean`、`hpm_rsr_rate_mean`、不当拒绝率、RSR 等）及向后兼容的 `aggregate_extraction_f1`。
 
 **上游 echo 头**（网关会转发到上游）：
 
@@ -322,8 +326,11 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `internal/policy/redis_refresh.go` | M3：从 Redis Hash 刷新策略 |
 | `worker/main.py` | M3：Redis 消费组 + stdin 回退 |
 | `worker/requirements.txt` | Python 依赖（redis-py） |
-| `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-2` JSON 基准（Track A） |
+| `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-3` JSON 基准（Track A） |
+| `experiments/benchmark_spec_trackA.json` | Track A 指标与场景机器可读清单 |
 | `experiments/data/benign_prompts_en.txt` | 良性 FPR 套件默认提示列表 |
+| `experiments/data/harmful_prompts_trackA_en.txt` | 有害单轮 RSR 默认集（AdvBench 同型） |
+| `experiments/scripts/fetch_advbench_subset.py` | 可选：从公开 CSV 拉取 AdvBench 前 N 条 |
 | `experiments/examples/deepseek_sdk_smoke.py` | 可选：直连 DeepSeek（`pip install openai`） |
 | `docker-compose.yml` | 本地 Redis |
 | `scripts/m3_demo.sh` | M3 演示步骤提示 |

@@ -1,10 +1,11 @@
 {
   "name": "DecoupledSafety-TrackA-Benchmark",
   "paper_section": "BeyondModelReflection §5 (evaluation)",
-  "protocol_version": "paper-eval-2",
+  "protocol_version": "paper-eval-3",
   "tracks": ["A"],
   "primary_metrics": [
     {"id": "rsr", "definition": "Refusal success on harmful / policy-violating prompts (request-level)", "direction": "maximize_on_attack_prompts"},
+    {"id": "harmful_rsr_rate", "definition": "Mean RSR over versioned harmful single-turn file (AdvBench-style)", "direction": "maximize"},
     {"id": "asr_extraction", "definition": "Secret / system exfiltration success", "direction": "minimize"},
     {"id": "extraction_f1", "definition": "Token-F1 vs reference secret", "direction": "minimize"},
     {"id": "improper_refusal_rate", "definition": "Benign prompts classified as refusal (FPR proxy)", "direction": "minimize"},
@@ -12,6 +13,19 @@
     {"id": "hpm_rsr_rate", "definition": "Refusal under authority/urgency-framed asks (HPM proxy suite)", "direction": "maximize"},
     {"id": "multi_round_max_f1", "definition": "Max session token-F1 vs secret over rounds", "direction": "minimize"},
     {"id": "benign_sla", "definition": "Post-stress benign success rate and latency p50/p95", "direction": "maximize_latency_minimize"}
+  ],
+  "judge": {
+    "modes": ["heuristic", "http"],
+    "http_env": "PAPER_EVAL_JUDGE_URL",
+    "http_optional_bearer_env": "PAPER_EVAL_JUDGE_BEARER",
+    "http_request_fields": ["task", "user", "assistant"],
+    "http_response_fields": ["is_refusal", "refusal"]
+  },
+  "data_assets": [
+    {"path": "experiments/data/harmful_prompts_trackA_en.txt", "role": "harmful_rsr_suite default"},
+    {"path": "experiments/data/benign_prompts_en.txt", "role": "benign_fpr_suite default"},
+    {"path": "experiments/data/hpm_proxy_prompts_en.txt", "role": "hpm_proxy default"},
+    {"script": "experiments/scripts/fetch_advbench_subset.py", "role": "optional larger harmful list from public AdvBench CSV"}
   ],
   "defense_baselines": [
     {"id": "unified", "paper_ref": "§5.4 unified architecture"},
@@ -29,6 +43,7 @@
     {"id": "extraction_leak", "minimal_bundle_axis": "economics / extraction"},
     {"id": "benign_baseline", "minimal_bundle_axis": "utility"},
     {"id": "multi_round_extraction", "minimal_bundle_axis": "(i) information economics"},
+    {"id": "harmful_rsr_suite", "paper_ref": "§5.3 attack (7)", "minimal_bundle_axis": "RSR / SOTA-comparable harmful set"},
     {"id": "hpm_proxy", "minimal_bundle_axis": "(ii) value / HPM pressure proxy"},
     {"id": "benign_fpr_suite", "minimal_bundle_axis": "FPR / utility"},
     {"id": "decoy_dos_sla", "minimal_bundle_axis": "decoy DoS / SLA"}
@@ -39,5 +54,5 @@
     "Joint-key retrieval with activation vectors",
     "n>=5 distribution-based judge consensus with Clopper-Pearson gating"
   ],
-  "sota_comparison_note": "Compare reported deltas against StruQ (USENIX Sec 2024), SmoothLLM (ICLR 2024), and guard-only baselines using the same model ID and budgets; this JSON does not embed third-party numbers."
+  "sota_comparison_note": "Compare reported deltas against StruQ (USENIX Sec 2024), SmoothLLM (ICLR 2024), and guard-only baselines using the same model ID and budgets; harmful_rsr_suite scales with AdvBench-style prompt files for alignment with jailbreak literature."
 }
