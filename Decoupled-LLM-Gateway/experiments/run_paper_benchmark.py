@@ -26,6 +26,9 @@ PAPER_EVAL_JUDGE_URL or --judge-url; response must include is_refusal or refusal
 SmoothLLM-style (--smooth-llm-samples K): when defense is smooth_llm and K>1, repeat chat with
 independent space jitter and majority-vote refusals (RSR scenarios); extraction uses max F1 / any leak.
 
+Optional gateway output-guard opt-in: --gateway-output-guard adds X-Gateway-Output-Guard: 1 for all
+non-direct_upstream defenses (requires gateway GATEWAY_OUTPUT_GUARD_URL etc.; see README).
+
 Real LLM: gateway uses DEEPSEEK_API_KEY / GATEWAY_UPSTREAM_API_KEY / OPENAI_API_KEY + GATEWAY_UPSTREAM.
 For defense direct_upstream, the script adds the same Bearer to urllib requests to --upstream-url.
 Pass --openai-model deepseek-chat (or gpt-4o-mini) for the JSON body and manifest.
@@ -326,11 +329,13 @@ def smooth_extraction_aggregate(
     return codes[pick], texts[pick], lat_sum, meta, ok_any, f1_max, users[pick]
 
 
-def defense_extra_headers(defense: str) -> Dict[str, str]:
+def defense_extra_headers(defense: str, *, gateway_output_guard: bool = False) -> Dict[str, str]:
     extra: Dict[str, str] = {
         "X-Experiment-Run-Id": f"paper-eval-{int(time.time() * 1000)}",
         "X-Defense-Baseline": defense,
     }
+    if gateway_output_guard and defense != "direct_upstream":
+        extra["X-Gateway-Output-Guard"] = "1"
     if defense == "direct_upstream":
         pass
     elif defense == "unified":
@@ -408,8 +413,9 @@ def run_scenario(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> ScenarioResult:
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     secret = "TOPSECRET-EVAL-42"
     refuse_kw = "MALICIOUS_TRIGGER"
@@ -521,8 +527,9 @@ def run_multi_round_extraction(
     f1_tau: float,
     openai_model: str,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     secret = "TOPSECRET-EVAL-42"
     h = dict(extra)
@@ -604,10 +611,11 @@ def run_harmful_rsr_suite(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
     """RSR on a file of harmful single-turn goals (AdvBench-style); complements refusal_keyword."""
     lines = _read_prompt_lines(prompts_path)
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     refused = 0
     details: List[Dict[str, Any]] = []
@@ -671,10 +679,11 @@ def run_hpm_proxy_suite(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
     """Track A proxy for §5 axis (ii): refusal under social-pressure framing (not full HPM dataset)."""
     lines = _read_prompt_lines(prompts_path)
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     refused = 0
     details: List[Dict[str, Any]] = []
@@ -738,9 +747,10 @@ def run_benign_fpr_suite(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
     lines = _read_prompt_lines(prompts_path)
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     improper = 0
     details: List[Dict[str, Any]] = []
@@ -828,8 +838,9 @@ def run_decoy_dos_sla(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
-    extra = defense_extra_headers(defense)
+    extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
 
     with ThreadPoolExecutor(max_workers=max(1, stress_workers)) as ex:
@@ -898,6 +909,7 @@ def run_matrix(
     openai_model: str,
     judge_cfg: JudgeConfig,
     smooth_cfg: SmoothLLMConfig,
+    gateway_output_guard: bool = False,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     multi = "multi_round_extraction" in scenarios
@@ -931,6 +943,7 @@ def run_matrix(
                     openai_model=openai_model,
                     judge_cfg=judge_cfg,
                     smooth=smooth_cfg,
+                    gateway_output_guard=gateway_output_guard,
                 )
                 out.append(asdict(r))
             except Exception as e:  # noqa: BLE001
@@ -948,6 +961,7 @@ def run_matrix(
                         f1_tau=f1_tau,
                         openai_model=openai_model,
                         smooth=smooth_cfg,
+                        gateway_output_guard=gateway_output_guard,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -965,6 +979,7 @@ def run_matrix(
                         openai_model=openai_model,
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
+                        gateway_output_guard=gateway_output_guard,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -982,6 +997,7 @@ def run_matrix(
                         openai_model=openai_model,
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
+                        gateway_output_guard=gateway_output_guard,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -999,6 +1015,7 @@ def run_matrix(
                         openai_model=openai_model,
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
+                        gateway_output_guard=gateway_output_guard,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1018,6 +1035,7 @@ def run_matrix(
                         openai_model=openai_model,
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
+                        gateway_output_guard=gateway_output_guard,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1167,6 +1185,11 @@ def main() -> None:
         help="model field in API body + manifest (use real model id when upstream is a real LLM)",
     )
     ap.add_argument("--output", "-o")
+    ap.add_argument(
+        "--gateway-output-guard",
+        action="store_true",
+        help="send X-Gateway-Output-Guard: 1 on non-direct_upstream requests (enable gateway output-guard path)",
+    )
     ap.add_argument("--self-check", action="store_true")
     args = ap.parse_args()
 
@@ -1207,6 +1230,7 @@ def main() -> None:
         "judge_mode": judge_cfg.mode,
         "smooth_llm_samples_k": smooth_cfg.samples_k,
         "smooth_llm_sigma": smooth_cfg.sigma,
+        "gateway_output_guard_header": bool(args.gateway_output_guard),
         "git_sha": os.environ.get("GIT_SHA", "").strip(),
         "hostname": os.environ.get("EVAL_HOSTNAME", "").strip(),
     }
@@ -1234,6 +1258,7 @@ def main() -> None:
             openai_model=args.openai_model,
             judge_cfg=judge_cfg,
             smooth_cfg=smooth_cfg,
+            gateway_output_guard=args.gateway_output_guard,
         )
         all_runs.append({"seed": sd, "results": results})
 

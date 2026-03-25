@@ -15,6 +15,7 @@ import (
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/decoy"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/logsink"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/obfuscate"
+	"github.com/raccoonrat/decoupled-llm-gateway/internal/outputguard"
 	"github.com/raccoonrat/decoupled-llm-gateway/internal/policy"
 )
 
@@ -22,6 +23,7 @@ const (
 	headerGatewayExperimentMode = "X-Gateway-Experiment-Mode"
 	headerExperimentRunID       = "X-Experiment-Run-Id"
 	headerDefenseBaseline       = "X-Defense-Baseline"
+	headerOutputGuard           = "X-Gateway-Output-Guard"
 )
 
 // Handler is the sync hot path: policy → obfuscate → decoy → upstream.
@@ -42,6 +44,14 @@ type Handler struct {
 	// LogMaxPromptRunes / LogMaxLLMRunes: 0 = do not truncate logged text (UTF-8 rune counts).
 	LogMaxPromptRunes int
 	LogMaxLLMRunes    int
+
+	// Optional: POST upstream assistant to OutputGuardURL (judge_service); replace body if judge says non-refusal.
+	OutputGuardURL             string
+	OutputGuardBearer          string
+	OutputGuardTimeout         time.Duration
+	OutputGuardFailOpen        bool
+	OutputGuardTemplate        string
+	OutputGuardRequireHeader   bool
 }
 
 func resolveExperimentMode(r *http.Request, fallback string) string {
@@ -190,6 +200,33 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	llmSnippet := extractAssistantContent(upBody)
+	if h.shouldRunOutputGuard(r) && resp.StatusCode == http.StatusOK && llmSnippet != "" {
+		gctx, gcancel := context.WithTimeout(r.Context(), h.OutputGuardTimeout)
+		replace, err := outputguard.ReplaceNonRefusal(
+			gctx,
+			h.OutputGuardURL,
+			h.OutputGuardBearer,
+			obfuscatedSnapshot,
+			llmSnippet,
+			client,
+			h.OutputGuardTimeout,
+		)
+		gcancel()
+		if err != nil {
+			if !h.OutputGuardFailOpen {
+				http.Error(w, "output guard: "+err.Error(), http.StatusBadGateway)
+				return
+			}
+		} else if replace {
+			tpl := h.OutputGuardTemplate
+			if tpl == "" {
+				tpl = "I'm sorry, I can't help with that."
+			}
+			upBody = []byte(openAICompletionJSON(tpl))
+			llmSnippet = tpl
+		}
+	}
+
 	event := buildEvent(llmSnippet, false)
 
 	for k, vv := range resp.Header {
@@ -203,6 +240,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(upBody)
 	h.emitLogEvent(event)
+}
+
+func (h *Handler) shouldRunOutputGuard(r *http.Request) bool {
+	if strings.TrimSpace(h.OutputGuardURL) == "" {
+		return false
+	}
+	if !h.OutputGuardRequireHeader {
+		return true
+	}
+	return strings.TrimSpace(r.Header.Get(headerOutputGuard)) == "1"
 }
 
 func (h *Handler) emitLogEvent(e contracts.GatewayLogEvent) {
@@ -316,5 +363,11 @@ func New(cfg *config.Config, store policy.Store, sink logsink.Sink) (*Handler, e
 		LogAfterResponse:      cfg.LogAfterResponse,
 		LogMaxPromptRunes:     cfg.LogMaxPromptRunes,
 		LogMaxLLMRunes:        cfg.LogMaxLLMRunes,
+		OutputGuardURL:        cfg.OutputGuardURL,
+		OutputGuardBearer:     cfg.OutputGuardBearer,
+		OutputGuardTimeout:    cfg.OutputGuardTimeout,
+		OutputGuardFailOpen:   cfg.OutputGuardFailOpen,
+		OutputGuardTemplate:   cfg.OutputGuardTemplate,
+		OutputGuardRequireHeader: cfg.OutputGuardRequireHeader,
 	}, nil
 }

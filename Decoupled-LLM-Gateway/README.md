@@ -298,6 +298,8 @@ OpenAI **Moderation** 仍用 `JUDGE_BACKEND=openai_moderation`（仅校验 assis
 
 **SmoothLLM 采样**：`--smooth-llm-samples 5 --smooth-llm-sigma 3` 仅在 **`--defenses` 含 `smooth_llm`** 时生效；其他防御下 K 视为 1。自检：`python3 experiments/judge_service/server.py --self-check`（已由 `make paper-eval-check` 间接调用）。
 
+**网关输出守卫（评测带头）**：若网关启用 `GATEWAY_OUTPUT_GUARD_URL`，可对「非拒绝」上游回复按模板覆盖；**默认需** `X-Gateway-Output-Guard: 1` 才执行（混合流量安全）。对经网关的 defense（**不含** `direct_upstream`），评测脚本可加 **`--gateway-output-guard`** 自动附加该头，`manifest.gateway_output_guard_header` 记录开关。**勿**在不明场景下对良性流量开启，除非你明确在做受控红队或测试环境。
+
 **真实 LLM**：将网关指向上游，例如 `export OPENAI_API_KEY=...` 且 `GATEWAY_UPSTREAM=https://api.openai.com/v1`，并传入 **`--openai-model gpt-4o-mini`**（写入 JSON `manifest` 与请求体 `model` 字段）。
 
 **多种子**：`--seeds 42,43,44,45,46` 生成多轮 `runs`，并附带 `aggregate_by_defense`（含 `harmful_rsr_rate_mean`、`hpm_rsr_rate_mean`、不当拒绝率、RSR 等）及向后兼容的 `aggregate_extraction_f1`。
@@ -354,7 +356,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `worker/main.py` | M3：Redis 消费组 + stdin 回退 |
 | `worker/requirements.txt` | Python 依赖（redis-py） |
 | `experiments/run_paper_benchmark.py` | 论文 §5 / `paper-eval-4` JSON 基准（Track A） |
-| `experiments/judge_service/server.py` | HTTP 拒绝判定微服务（启发式 / OpenAI moderation） |
+| `experiments/judge_service/server.py` | HTTP 拒绝判定微服务（启发式 / OpenAI moderation / `chat_completion`） |
 | `experiments/benchmark_spec_trackA.json` | Track A 指标与场景机器可读清单 |
 | `experiments/data/benign_prompts_en.txt` | 良性 FPR 套件默认提示列表 |
 | `experiments/data/harmful_prompts_trackA_en.txt` | 有害单轮 RSR 默认集（AdvBench 同型） |
@@ -490,6 +492,12 @@ make run-gateway 2>/dev/null | python3 worker/main.py
 | `GATEWAY_POLICY_REDIS_HASH` | `decoupled:policy:rules` | 策略规则 Redis Hash |
 | `GATEWAY_POLICY_REFRESH_MS` | `2000` | 从 Redis 刷新策略的周期（毫秒） |
 | `GATEWAY_EXPERIMENT_MODE` | `default` | `no_obfuscate` / `no_decoy` / `intent_only` / `structured_wrap`（可被请求头覆盖） |
+| `GATEWAY_OUTPUT_GUARD_URL` | 空 | 非空：上游 200 后 POST 该 URL 做「是否拒绝」二值判定；`is_refusal==false` 时可按模板覆盖回复（见 `internal/outputguard`） |
+| `GATEWAY_OUTPUT_GUARD_BEARER` | 空 | 守卫 HTTP 请求的 `Authorization: Bearer` |
+| `GATEWAY_OUTPUT_GUARD_TIMEOUT_MS` | `10000` | 守卫请求超时 |
+| `GATEWAY_OUTPUT_GUARD_FAIL_OPEN` | `1` | `0`：守卫失败则视为需覆盖/保守路径；`1`（默认）：失败则保持上游原文 |
+| `GATEWAY_OUTPUT_GUARD_TEMPLATE` | 英文短拒答句 | 覆盖时写入完成 JSON 的正文 |
+| `GATEWAY_OUTPUT_GUARD_REQUIRE_HEADER` | URL 已配置时为需 `X-Gateway-Output-Guard: 1` | 设 `0` 或 `false` 则不对混合流量要求该头（慎用） |
 | `ECHO_LISTEN` | `:9090` | 回声服务监听地址 |
 | `ECHO_LEAK_SYSTEM` | `0` | `1` 时在回复中附加 system 内容（M3 诱饵泄露演示） |
 | `ECHO_EVAL_SECRET` | 空 | 评测用秘密串（亦可用 `X-Echo-Eval-Secret`） |

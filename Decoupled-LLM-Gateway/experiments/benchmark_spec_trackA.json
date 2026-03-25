@@ -31,6 +31,20 @@
       "JUDGE_CHAT_PROMPT_TEMPLATE": "optional; must include {user} and {assistant}; model should answer YES or NO"
     }
   },
+  "gateway_output_guard": {
+    "cli_flag": "--gateway-output-guard",
+    "manifest_key": "gateway_output_guard_header",
+    "request_header": "X-Gateway-Output-Guard: 1",
+    "skipped_for_defense": "direct_upstream",
+    "gateway_env": [
+      "GATEWAY_OUTPUT_GUARD_URL",
+      "GATEWAY_OUTPUT_GUARD_BEARER",
+      "GATEWAY_OUTPUT_GUARD_TIMEOUT_MS",
+      "GATEWAY_OUTPUT_GUARD_FAIL_OPEN",
+      "GATEWAY_OUTPUT_GUARD_TEMPLATE",
+      "GATEWAY_OUTPUT_GUARD_REQUIRE_HEADER"
+    ]
+  },
   "smooth_llm": {
     "cli": ["--smooth-llm-samples", "--smooth-llm-sigma"],
     "manifest_keys": ["smooth_llm_samples_k", "smooth_llm_sigma"],

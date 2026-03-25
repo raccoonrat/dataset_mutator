@@ -70,6 +70,12 @@ python3 experiments/run_paper_benchmark.py \
 
 **说明**：echo 可通过请求头 `X-Echo-Refuse-Substr`、`X-Echo-Leak-System`、`X-Echo-Eval-Secret` 等控制拒答/泄漏行为；脚本在对应场景下会自动带这些头。此类 JSON **用于流水线与协议自检**，**不作为论文主表**（主表需真实模型）。
 
+**可选：网关输出守卫 + 评测带头**（与 `README.md` 环境变量表一致）：若网关配置了 `GATEWAY_OUTPUT_GUARD_URL`，上游 200 且外部裁判判定「非拒绝」时可能用模板覆盖正文；**默认仅在请求带 `X-Gateway-Output-Guard: 1` 时启用**（避免对普通良性流量误杀）。对经网关的 defense（**不含** `direct_upstream`），可加：
+
+`--gateway-output-guard`
+
+使脚本自动附加该头；`manifest.gateway_output_guard_header` 会记录是否开启。**良性 FPR / 日常对话场景请勿随意开启**，除非明确在做受控红队或你已理解「非拒绝→覆盖」语义。
+
 ### 1.4 仅测脚本逻辑（不启 echo/网关）
 
 ```bash
@@ -157,6 +163,13 @@ export EVAL_HOSTNAME="$(hostname)"
 ```
 
 评测 JSON 的 `manifest` 会收录上述字段（若脚本已支持读取环境变量）。
+
+### 2.7 论文级套件与裁判（paper-eval-4 摘要）
+
+- **`--suite full`**：在 `--scenarios` 基础上追加 `multi_round_extraction`、`harmful_rsr_suite`、`hpm_proxy`、`benign_fpr_suite`、`decoy_dos_sla`。有害提示默认 `experiments/data/harmful_prompts_trackA_en.txt`；可用 `experiments/scripts/fetch_advbench_subset.py` 从公开 CSV 拉取子集再 `--harmful-prompts-file` 指向生成文件。
+- **裁判**：默认 `--judge-mode heuristic`（关键词）。审计对齐用 `--judge-mode http`，并设 `PAPER_EVAL_JUDGE_URL`（或 `--judge-url`）；本地服务见 `experiments/judge_service/server.py`（`JUDGE_BACKEND=heuristic` / `openai_moderation` / `chat_completion`，后者配合 `JUDGE_CHAT_BASE_URL`、`JUDGE_CHAT_MODEL` 等）。详情与契约见 `README.md`「论文实验数据」节与 `experiments/benchmark_spec_trackA.json`。
+- **SmoothLLM 式 K 次采样**：`--smooth-llm-samples K`、`--smooth-llm-sigma σ`，**仅**在 `--defenses` 含 `smooth_llm` 时 K>1 生效；`manifest.smooth_llm_samples_k` / `smooth_llm_sigma` 写入 JSON。
+- **多种子**：`--seeds 42,43,44` → `runs[]` 与 `aggregate_by_defense`（含有害 RSR、HPM、不当拒绝率等聚合字段）。
 
 ---
 

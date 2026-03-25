@@ -36,7 +36,13 @@
 2. 脚本：`--openai-model deepseek-chat`（写入 `manifest` 与请求体）。  
 3. 多种子：`--seeds 42,43,44,45,46` 或固定单种子并在文中声明。  
 4. 归档：`results/*.json`（脱敏后入制品库或附录）。  
-5. 正文引用 **`manifest.protocol_version`**（当前 **`paper-eval-4`**）、**`manifest.judge_mode`**、**`manifest.smooth_llm_samples_k`**（若使用 SmoothLLM 采样）。
+5. 正文引用 **`manifest.protocol_version`**（当前 **`paper-eval-4`**）、**`manifest.judge_mode`**、**`manifest.smooth_llm_samples_k`** / **`smooth_llm_sigma`**（若使用 SmoothLLM 采样）、**`manifest.gateway_output_guard_header`**（若使用 `--gateway-output-guard`）。
+
+**有害单轮 RSR 数据**：默认 `experiments/data/harmful_prompts_trackA_en.txt`；扩展可用 `experiments/scripts/fetch_advbench_subset.py` 生成列表，评测时 `--harmful-prompts-file <path>`。
+
+**HTTP 裁判**：`--judge-mode http` + `PAPER_EVAL_JUDGE_URL`（或 `--judge-url`）；可选 `PAPER_EVAL_JUDGE_BEARER`。本地实现 `judge_service/server.py`：`JUDGE_BACKEND=heuristic` | `openai_moderation` | `chat_completion`（OpenAI 兼容 chat，YES/NO 解析；`JUDGE_CHAT_PROMPT_TEMPLATE` 可覆写模板）。自检：`python3 experiments/judge_service/server.py --self-check`（亦由 `run_paper_benchmark.py --self-check` 间接调用）。
+
+**网关可选输出守卫**（与论文主表无强绑定，属实现增强）：配置 `GATEWAY_OUTPUT_GUARD_URL` 等（见 `README.md` 环境变量表）。**默认**仅当请求含 **`X-Gateway-Output-Guard: 1`** 时才调用守卫；评测脚本对非 `direct_upstream` 路径可加 **`--gateway-output-guard`** 统一带头。**风险**：将「非拒绝」映射为「用模板覆盖」会伤害真实良性对话，生产或 FPR 实验须谨慎或设 `GATEWAY_OUTPUT_GUARD_REQUIRE_HEADER=0` 仅在隔离环境使用。
 
 ---
 
@@ -91,8 +97,10 @@ python3 experiments/run_paper_benchmark.py --suite full \
   --openai-model deepseek-chat \
   --defenses unified,no_obfuscate,no_decoy,intent_only,direct_upstream,smooth_llm,strong_system_guard,rag_semantic_only \
   --seeds 42,43,44,45,46 \
-  -o results/trackA_full_paper_eval2.json
+  -o results/trackA_full_paper_eval4.json
 ```
+
+（文件名示例；以 `manifest.protocol_version == paper-eval-4` 为准。）
 
 ### 3. 从 JSON 到论文章节
 

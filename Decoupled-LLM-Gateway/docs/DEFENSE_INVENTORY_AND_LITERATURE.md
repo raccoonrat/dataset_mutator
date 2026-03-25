@@ -9,8 +9,9 @@
 | **同步策略降级** | `internal/policy/policy.go` | 内存正则规则库；命中 `DEGRADE_TO_TEMPLATE` 则 **不调用上游**，直接返回模板 JSON。 |
 | **策略热更新** | `internal/policy/redis_refresh.go` | 周期从 Redis Hash 合并规则到 `MemoryStore`。 |
 | **网关热路径** | `internal/gateway/gateway.go` | 读 body → `PrepareRequestBody`（混淆快照 + 上游体）→ 策略匹配 → 上游 → 日志 Sink；实验头 `X-Gateway-Experiment-Mode` 控制消融。 |
+| **可选输出守卫** | `internal/outputguard/` + `gateway.go` | 配置 `GATEWAY_OUTPUT_GUARD_URL` 时，上游 200 后可调用外部 HTTP 做 `refusal_binary`；若判定为**非拒绝**则可用 `GATEWAY_OUTPUT_GUARD_TEMPLATE` 覆盖正文。**默认**（URL 已设）需请求头 **`X-Gateway-Output-Guard: 1`** 才启用；评测可用 `run_paper_benchmark.py --gateway-output-guard` 对非 `direct_upstream` 自动带头。 |
 | **异步闭环（M3）** | `worker/main.py` + `internal/logsink/redis_stream.go` | 消费网关事件；**诱饵泄露**（输出含 `decoy-`）→ 生成 `PolicyRule` → `HSET` 回 Redis；网关侧下次命中则降级。 |
-| **评测代理** | `experiments/run_paper_benchmark.py` | 协议 **`paper-eval-4`**：同上 + `smooth_llm` 下 **K 次扰动多数票**（`--smooth-llm-samples`）；`experiments/judge_service/server.py` 为可选 HTTP 裁判实现。 |
+| **评测代理** | `experiments/run_paper_benchmark.py` | 协议 **`paper-eval-4`**：`smooth_llm` 下 **K 次扰动多数票**（`--smooth-llm-samples`）；HTTP 裁判（`--judge-mode http`）；可选 **`--gateway-output-guard`**；`judge_service/server.py` 为本地裁判实现。 |
 | **回声上游** | `cmd/echo-llm` | 可控 `X-Echo-*` 行为，用于烟测与 CI。 |
 
 ## 二、近年顶会/顶刊相关方向（与实现对齐或可作补充）

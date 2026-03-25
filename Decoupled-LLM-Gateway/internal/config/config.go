@@ -38,6 +38,14 @@ type Config struct {
 	// LogMaxPromptRunes / LogMaxLLMRunes: 0 = no truncation (UTF-8 rune counts).
 	LogMaxPromptRunes int
 	LogMaxLLMRunes    int
+
+	// Optional post-upstream HTTP guard (judge_service refusal_binary). See RUN_GUIDE.md.
+	OutputGuardURL             string
+	OutputGuardBearer          string
+	OutputGuardTimeout         time.Duration
+	OutputGuardFailOpen        bool
+	OutputGuardTemplate        string
+	OutputGuardRequireHeader   bool // if true (default when URL set), client must send X-Gateway-Output-Guard: 1
 }
 
 func FromEnv() (*Config, error) {
@@ -88,6 +96,27 @@ func FromEnv() (*Config, error) {
 		maxLLMLog = 0
 	}
 
+	guardURL := strings.TrimSpace(os.Getenv("GATEWAY_OUTPUT_GUARD_URL"))
+	guardBearer := strings.TrimSpace(os.Getenv("GATEWAY_OUTPUT_GUARD_BEARER"))
+	guardMS, _ := strconv.Atoi(getenv("GATEWAY_OUTPUT_GUARD_TIMEOUT_MS", "10000"))
+	if guardMS <= 0 {
+		guardMS = 10000
+	}
+	guardFailOpen := getenv("GATEWAY_OUTPUT_GUARD_FAIL_OPEN", "1") != "0"
+	guardTpl := getenv(
+		"GATEWAY_OUTPUT_GUARD_TEMPLATE",
+		"I'm sorry, I can't help with that.",
+	)
+	// When URL is set, default to requiring per-request opt-in header (safe for mixed traffic).
+	guardRequireHdr := true
+	if guardURL != "" {
+		if v := strings.TrimSpace(os.Getenv("GATEWAY_OUTPUT_GUARD_REQUIRE_HEADER")); v != "" {
+			guardRequireHdr = v != "0" && strings.ToLower(v) != "false"
+		}
+	} else {
+		guardRequireHdr = false
+	}
+
 	return &Config{
 		ListenAddr:         listen,
 		UpstreamURL:        u,
@@ -106,6 +135,13 @@ func FromEnv() (*Config, error) {
 		LogAfterResponse:   logAfterResp,
 		LogMaxPromptRunes:  maxPromptLog,
 		LogMaxLLMRunes:     maxLLMLog,
+
+		OutputGuardURL:           guardURL,
+		OutputGuardBearer:        guardBearer,
+		OutputGuardTimeout:       time.Duration(guardMS) * time.Millisecond,
+		OutputGuardFailOpen:      guardFailOpen,
+		OutputGuardTemplate:      guardTpl,
+		OutputGuardRequireHeader: guardRequireHdr,
 	}, nil
 }
 

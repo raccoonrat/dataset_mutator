@@ -18,6 +18,7 @@
 | RSR、单轮抽取 ASR / token-F1 | 场景 `refusal_keyword`、`extraction_leak` |
 | §5 攻击 (7) 标准有害集 RSR | `harmful_rsr_suite` + `experiments/data/harmful_prompts_trackA_en.txt`；可 `fetch_advbench_subset.py` 扩展 |
 | 可选 HTTP 裁判（审计对齐） | `--judge-mode http`、`PAPER_EVAL_JUDGE_URL` / `--judge-url`；`judge_service/server.py` 支持 `heuristic` / `openai_moderation` / **`chat_completion`**（OpenAI 兼容路由 + Llama Guard 等） |
+| 可选网关输出守卫（工程切片） | 环境变量 `GATEWAY_OUTPUT_GUARD_*`；默认需 `X-Gateway-Output-Guard: 1`；评测脚本 **`--gateway-output-guard`** 对非 `direct_upstream` 自动带头；`manifest.gateway_output_guard_header` |
 | **最小可验证包 (i)：多轮抽取 F1–轮次、达到 τ 的轮数** | `multi_round_extraction`（`rounds[]`、`rounds_to_f1_ge_tau`、`max_f1`） |
 | Judge FPR 代理（held-out 良性集） | `benign_fpr_suite` + `Decoupled-LLM-Gateway/experiments/data/benign_prompts_en.txt` |
 | Decoy-DoS / 良性 SLA 代理 | `decoy_dos_sla`（并发压力 + 良性 p50/p95） |
@@ -52,7 +53,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 5. **论文引用**：在正文或附录中引用 `results/paper_eval_trackA.json` 的 **`manifest`**（协议版本、模型字段、URL 等）与 **`runs[*].results`**；并与论文附录表（评估矩阵 / 复现清单）中的 **模型 ID、随机种子、Track A** 声明一致。
 
-6. **协议版本**：当前 harness 自述为 **`paper-eval-4`**（见脚本 docstring 与 JSON `manifest.protocol_version`）；含 **`judge_service/server.py`** 与 **`--smooth-llm-samples`**。
+6. **协议版本**：当前 harness 自述为 **`paper-eval-4`**（见脚本 docstring 与 JSON `manifest.protocol_version`）；含 **`judge_service/server.py`**、**`--smooth-llm-samples`**、可选 **`--gateway-output-guard`** 与 manifest 中 **`gateway_output_guard_header`**。
 
 ---
 
@@ -64,7 +65,8 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | `paper/BeyondModelReflection_DecoupledSafety_CN.tex` | 同上中文版 |
 | `Decoupled-LLM-Gateway/README.md` | 「论文实验数据」节与 `paper-eval-4`、场景表、真实 LLM 命令示例 |
 | `Decoupled-LLM-Gateway/experiments/run_paper_benchmark.py` | `paper-eval-4`：有害 RSR、HTTP 裁判、SmoothLLM K 采样、多轮、HPM 代理、良性 FPR、Decoy-DoS/SLA、多种子聚合 |
-| `Decoupled-LLM-Gateway/experiments/judge_service/server.py` | 本地 HTTP 裁判（启发式 / OpenAI moderation） |
+| `Decoupled-LLM-Gateway/experiments/judge_service/server.py` | 本地 HTTP 裁判（启发式 / OpenAI moderation / `chat_completion`） |
+| `Decoupled-LLM-Gateway/internal/outputguard/` | 可选：上游回复后经 HTTP 二值裁判决定是否用模板覆盖（配合 `X-Gateway-Output-Guard`） |
 | `Decoupled-LLM-Gateway/experiments/data/benign_prompts_en.txt` | 默认良性提示列表（可替换为更大 held-out 集） |
 | CI | `make paper-eval-check` / `python3 experiments/run_paper_benchmark.py --self-check` |
 

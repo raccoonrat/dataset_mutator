@@ -279,3 +279,105 @@ func TestPolicySeedEquivalent(t *testing.T) {
 		t.Fatal("expected match")
 	}
 }
+
+func TestOutputGuardReplacesWhenJudgeSaysNonRefusal(t *testing.T) {
+	guard := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"is_refusal": false}`))
+	}))
+	defer guard.Close()
+
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"unsafe completion"}}]}`))
+	}))
+	defer up.Close()
+
+	var buf bytes.Buffer
+	h := &Handler{
+		UpstreamBase: strings.TrimSuffix(up.URL, ""),
+		UpstreamClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		MaxBody:                  1 << 20,
+		Policy:                   policy.NewMemoryStore(),
+		Log:                      logsink.NewJSONLines(&buf),
+		OutputGuardURL:           guard.URL,
+		OutputGuardRequireHeader: true,
+		OutputGuardFailOpen:      true,
+		OutputGuardTimeout:       5 * time.Second,
+		OutputGuardTemplate:      "BLOCKED",
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	reqBody := `{"model":"m","messages":[{"role":"user","content":"harmful ask"}]}`
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/chat/completions", strings.NewReader(reqBody))
+	req.Header.Set("X-Gateway-Output-Guard", "1")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var root map[string]json.RawMessage
+	if err := json.NewDecoder(res.Body).Decode(&root); err != nil {
+		t.Fatal(err)
+	}
+	var choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	_ = json.Unmarshal(root["choices"], &choices)
+	if len(choices) == 0 || choices[0].Message.Content != "BLOCKED" {
+		t.Fatalf("expected BLOCKED, got %+v", choices)
+	}
+}
+
+func TestOutputGuardSkippedWithoutHeader(t *testing.T) {
+	guardCalls := 0
+	guard := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardCalls++
+		_, _ = w.Write([]byte(`{"is_refusal": false}`))
+	}))
+	defer guard.Close()
+
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"keep me"}}]}`))
+	}))
+	defer up.Close()
+
+	h := &Handler{
+		UpstreamBase: strings.TrimSuffix(up.URL, ""),
+		UpstreamClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		MaxBody:                  1 << 20,
+		Policy:                   policy.NewMemoryStore(),
+		Log:                      logsink.NewJSONLines(&bytes.Buffer{}),
+		OutputGuardURL:           guard.URL,
+		OutputGuardRequireHeader: true,
+		OutputGuardTimeout:       5 * time.Second,
+		OutputGuardTemplate:      "BLOCKED",
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"m","messages":[{"role":"user","content":"x"}]}`))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "keep me") {
+		t.Fatalf("expected original body, got %s", body)
+	}
+	if guardCalls != 0 {
+		t.Fatalf("guard should not run without header, calls=%d", guardCalls)
+	}
+}
