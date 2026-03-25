@@ -392,6 +392,8 @@ print(response.choices[0].message.content)
 
 ## 快速开始
 
+**集中运行说明（echo 烟测 ↔ 真实 API、评测命令）见 [`RUN_GUIDE.md`](RUN_GUIDE.md)。**
+
 **终端 1 — Mock LLM**
 
 ```bash
