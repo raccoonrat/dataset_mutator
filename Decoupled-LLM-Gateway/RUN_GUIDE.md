@@ -328,6 +328,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 | 文件 | 内容 |
 |------|------|
 | `README.md` | 混淆 profile、Redis/M3、实验头、环境变量全表 |
+| `experiments/EXPERIMENT_PLAYBOOK_CN.md` | Track A 实验与论文补充：能力表、边界、从零到正式数据、JSON→论文章节 |
 | `experiments/PIPELINE_FORMAL_DATA.md` | 论文流水线、正式数据归档、`direct_upstream` Bearer |
 | `docs/DEFENSE_INVENTORY_AND_LITERATURE.md` | 已实现防御与文献对照 |
 

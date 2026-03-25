@@ -5,6 +5,9 @@
 **完整流水线（验证逻辑、正式数据获取步骤、数据流图）：**  
 [`Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md`](../Decoupled-LLM-Gateway/experiments/PIPELINE_FORMAL_DATA.md)
 
+**实验起步、能力边界与论文写作（展开说明）：**  
+[`Decoupled-LLM-Gateway/experiments/EXPERIMENT_PLAYBOOK_CN.md`](../Decoupled-LLM-Gateway/experiments/EXPERIMENT_PLAYBOOK_CN.md)
+
 ---
 
 ## 1. 对齐关系（论文目标 → 代码）

@@ -2,6 +2,8 @@
 
 本文说明 **`Decoupled-LLM-Gateway`** 与 **`run_paper_benchmark.py`（`paper-eval-4`）** 如何支撑《Beyond Model Reflection / 解耦安全》的实证部分，以及从环境到 **可写入论文的 JSON** 的完整流水线。
 
+**更详尽的实验目标、能力边界与论文写作注意**：见同目录 **[`EXPERIMENT_PLAYBOOK_CN.md`](EXPERIMENT_PLAYBOOK_CN.md)**。
+
 ---
 
 ## 一、验证关系：论文主张 ←→ 代码在测什么

@@ -335,7 +335,7 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 **Track B**（GCG、表征对齐 PBU）不在本脚本内。本地自检：`make paper-eval-check`。
 
-**正式实验流水线（验证论文主张、产出主表 JSON、数据流说明）：** 见 [`experiments/PIPELINE_FORMAL_DATA.md`](experiments/PIPELINE_FORMAL_DATA.md)。`direct_upstream` 基线直连 DeepSeek/OpenAI 时，脚本会从 `DEEPSEEK_API_KEY` / `GATEWAY_UPSTREAM_API_KEY` / `OPENAI_API_KEY` 读取 Bearer。
+**正式实验流水线（验证论文主张、产出主表 JSON、数据流说明）：** 见 [`experiments/PIPELINE_FORMAL_DATA.md`](experiments/PIPELINE_FORMAL_DATA.md)。**实验目标、能力边界、JSON→论文：** 见 [`experiments/EXPERIMENT_PLAYBOOK_CN.md`](experiments/EXPERIMENT_PLAYBOOK_CN.md)。`direct_upstream` 基线直连 DeepSeek/OpenAI 时，脚本会从 `DEEPSEEK_API_KEY` / `GATEWAY_UPSTREAM_API_KEY` / `OPENAI_API_KEY` 读取 Bearer。
 
 ---
 
