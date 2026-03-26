@@ -98,3 +98,79 @@ python3 experiments/scripts/export_trackA_table_latex.py \
 **真实 DeepSeek / 其他付费上游**：跑 `run_trackA_full_paper.sh` 或手工跑 `run_paper_benchmark.py` 前，在 `Decoupled-LLM-Gateway/` 下先执行 **` . ./env`**（或确保等价环境变量已导出），再启动网关（`GATEWAY_UPSTREAM` 与密钥与 `env` 一致）。
 
 若尚无真实上游 JSON，可用 `results/trackA_full_echo_seed3.json` 生成**控制实验**表（须在论文中标注为 echo，非生产模型）。
+
+---
+
+## 7. 补充实验：对照原计划后的缺口分析与优先级
+
+### 7.1 计划内已完成项（摘要）
+
+| 计划项 | 状态 |
+|--------|------|
+| 无 cap 全场景 + 9 defenses + 种子 42,43,44 | 已有 `results/trackA_full_paper_seed3.json`（须做 **7.2 数据有效性校验**） |
+| echo 同矩阵控制实验 | `results/trackA_full_echo_seed3.json` + `run_trackA_full_echo_ci.sh` |
+| 主表 LaTeX + 论文 `\input` | `paper/generated/trackA_main_table*.tex` |
+| 附录提示表 SHA256 | 已写入中英 `.tex` |
+
+### 7.2 当前 JSON 的解读风险（必读）
+
+1. **网关 vs 脚本 `manifest` 不一致**  
+   `run_paper_benchmark.py` 的 `manifest.upstream_url` 反映的是 **`--upstream-url`（给 `direct_upstream` 用）**，**不保证** 网关进程里的 `GATEWAY_UPSTREAM`。若网关仍指向 **echo-llm**，则经网关的 `assistant_text` 会出现 **`[echo]`** 前缀、延迟 **亚毫秒～几十毫秒**，而 `direct_upstream` 仍是真实 DeepSeek（秒级）。此时 **主表「经网关」列与「直连」列不在同一实验台上**，不能用来论证「网关相对基座的提升」。  
+
+   **动作**：跑真实模型前 **` . ./env`**，**重启网关**，再跑 `run_trackA_full_paper.sh`；跑完后执行：
+
+   ```bash
+   python3 experiments/scripts/validate_paper_json.py results/trackA_full_paper_seed3.json
+   ```
+
+2. **`harmful_rsr_suite` + 启发式裁判**  
+   若上游实际为强安全模型，回复长段「教育式拒绝」但**不含**启发式关键词，可能被记为 **RSR=0**；与人工或 HTTP 裁判结果可能不一致。  
+
+   **动作**：主文/附录并列 **`--judge-mode heuristic`** 与 **`http`**（`PAPER_EVAL_JUDGE_URL`）的一小段对照，或子集人工标注 κ。
+
+3. **同步策略降级 vs LLM 拒答**  
+   `refusal_keyword` 对 `MALICIOUS_TRIGGER` 可能走 **网关模板**（极快、`REFUSAL_SINGLE_GUARD`），与「模型自身 RSR」不是同一机制；正文应区分 **policy degradation** 与 **upstream refusal**。
+
+4. **消融「拉不开」**  
+   在强对齐模型上，`extraction_leak_f1`、多轮 `max_f1` 可能全为 0，网关消融列接近——符合计划在「风险与应对」中的说明。可接受的叙事是：**联合指标 + `direct_upstream` 对照 + echo 控制**，并承认 **value-add 主要体现在纵深与可审计链路上**，而非单一 ASR 差。
+
+### 7.3 建议的补充实验（按性价比排序）
+
+| 优先级 | 目的 | 做法 |
+|--------|------|------|
+| **P0** | 保证主表可信 | 修正网关上游后**重跑** `run_trackA_full_paper.sh`；`validate_paper_json.py` 通过；重新 `export_trackA_table_latex.py` |
+| **P1** | 论文 §5「HTTP 裁判」 | 启动 `judge_service`，设 `PAPER_EVAL_JUDGE_URL`，`--judge-mode http --suite full`（可只跑 harmful + benign FPR 子集降费） |
+| **P1** | SmoothLLM 分布评估（K>1） | 仅对 `smooth_llm` defense：`--smooth-llm-samples 5`（或 3），与 K=1 对照一行 |
+| **P2** | 输出守卫消融 | `GATEWAY_OUTPUT_GUARD_URL` 配置后，`--gateway-output-guard` 跑子集 defenses，另存 `trackA_full_paper_guard_seed3.json` |
+| **P2** | 有害集规模 / 文献可比 | `scripts/fetch_advbench_subset.py` 扩大 `harmful_prompts_trackA_en.txt`，**更新 SHA256** 与附录表 |
+| **P3** | HPM 全文基准 | 在合规前提下替换 `hpm_proxy_prompts_en.txt` 为许可的 HPM 子集，并声明非代理 |
+| **P3** | 第二模型 | 换 `gpt-4o-mini` 等再跑一套 JSON，附录多一行「模型敏感性」 |
+
+### 7.4 示例命令片段（真实上游 + env）
+
+分步清单（含网关须非 echo）：[`../Decoupled-LLM-Gateway/experiments/P0_REAL_UPSTREAM_CHECKLIST.md`](../Decoupled-LLM-Gateway/experiments/P0_REAL_UPSTREAM_CHECKLIST.md)。
+
+```bash
+cd Decoupled-LLM-Gateway
+set -a && . ./env && set +a
+# 终端 A：确认日志里 upstream 为 https 且 upstream_auth=bearer
+go run ./cmd/gateway
+# 终端 B：`run_trackA_full_paper.sh` 已内置预检 + validate + LaTeX 导出（可用 RUN_VALIDATE_AND_EXPORT=0 关闭后两步）
+bash experiments/scripts/run_trackA_full_paper.sh
+python3 experiments/scripts/validate_paper_json.py results/trackA_full_paper_seed3.json
+```
+
+**HTTP 裁判（降费：只跑有害 + 良性 FPR）** 示例：
+
+```bash
+# 终端 C：python experiments/judge_service/server.py （按 README 配 JUDGE_BACKEND）
+export PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/v1/judge
+set -a && . ./env && set +a
+python3 experiments/run_paper_benchmark.py \
+  --gateway-url http://127.0.0.1:8080 --upstream-url https://api.deepseek.com \
+  --openai-model deepseek-chat \
+  --defenses unified,direct_upstream \
+  --scenarios harmful_rsr_suite,benign_fpr_suite \
+  --seeds 42,43,44 --judge-mode http \
+  -o results/trackA_judge_http_subset.json
+```

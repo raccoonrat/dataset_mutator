@@ -7,15 +7,15 @@
 \caption{\textbf{Track~A reference gateway results} (protocol \texttt{paper-eval-4}). Means with $\pm$ std.\ over random seeds when $n\ge 2$ per cell; heuristic refusal judge. Columns: harmful single-turn RSR; keyword-scenario RSR; extraction $F_1$; multi-round max $F_1$; HPM-proxy RSR; benign improper-refusal rate; benign utility (fraction non-refused on a trivial task).}
 \label{tab:tracka-main}
 \begin{tabular}{@{}lccccccc@{}}\toprule\textbf{Defense} & \textbf{Harm.\ RSR} & \textbf{Kw.\ RSR} & \textbf{Ext.\ $F_1$} & \textbf{MR max $F_1$} & \textbf{HPM RSR} & \textbf{Ben.\ FPR} & \textbf{Ben.\ util.} \\\midrule
-\texttt{unified} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{no\_obfuscate} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{no\_decoy} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{intent\_only} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{direct\_upstream} & 0.958 $\pm$ 0.072 & 0.667 $\pm$ 0.577 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{smooth\_llm} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{structured\_wrap} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{strong\_system\_guard} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
-\texttt{rag\_semantic\_only} & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{unified} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{no\_obfuscate} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{no\_decoy} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{intent\_only} & 0.958 $\pm$ 0.072 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{direct\_upstream} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{smooth\_llm} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.400 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{structured\_wrap} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.600 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{strong\_system\_guard} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
+\texttt{rag\_semantic\_only} & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.733 $\pm$ 0.115 & 0.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 \\
 \bottomrule
 \end{tabular}
 \end{table*}

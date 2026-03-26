@@ -7,7 +7,9 @@
 - [`RUN_GUIDE.md`](../RUN_GUIDE.md)：echo / 真实上游、`run_paper_benchmark.py`、输出守卫、小样本对比。  
 - [`PIPELINE_FORMAL_DATA.md`](PIPELINE_FORMAL_DATA.md)：正式数据定义、流水线顺序、数据流图。  
 - [`benchmark_spec_trackA.json`](benchmark_spec_trackA.json)：场景、指标、manifest 字段的机器可读清单。  
-- [`../../paper/DecoupledSafety_Empirical_Alignment.md`](../../paper/DecoupledSafety_Empirical_Alignment.md)：论文目标与代码索引。
+- [`../../paper/DecoupledSafety_Empirical_Alignment.md`](../../paper/DecoupledSafety_Empirical_Alignment.md)：论文目标与代码索引。  
+- [`../../paper/Data_Mapping_TrackA_to_Paper.md`](../../paper/Data_Mapping_TrackA_to_Paper.md)：结果 JSON 与论文章节映射；**§7 补充实验优先级**与网关/echo 混跑风险。  
+- [`scripts/validate_paper_json.py`](scripts/validate_paper_json.py)：对归档 JSON 做 echo/延迟一致性检查（真实上游全量跑完后建议执行）。
 
 ---
 
