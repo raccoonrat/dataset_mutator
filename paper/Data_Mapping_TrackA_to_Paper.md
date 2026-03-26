@@ -139,8 +139,8 @@ python3 experiments/scripts/export_trackA_table_latex.py \
 | 优先级 | 目的 | 做法 |
 |--------|------|------|
 | **P0** | 保证主表可信 | 修正网关上游后**重跑** `run_trackA_full_paper.sh`；`validate_paper_json.py` 通过；重新 `export_trackA_table_latex.py` |
-| **P1** | 论文 §5「HTTP 裁判」 | 启动 `judge_service`，设 `PAPER_EVAL_JUDGE_URL`，`--judge-mode http --suite full`（可只跑 harmful + benign FPR 子集降费） |
-| **P1** | SmoothLLM 分布评估（K>1） | 仅对 `smooth_llm` defense：`--smooth-llm-samples 5`（或 3），与 K=1 对照一行 |
+| **P1** | 论文 §5「HTTP 裁判」 | 一键子集：`Decoupled-LLM-Gateway/experiments/scripts/run_trackA_p1_http_judge_subset.sh`（内置启 judge、预检、validate）；或手动启动 `judge_service` 后设 `PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/judge` |
+| **P1** | SmoothLLM 分布评估（K>1） | `experiments/scripts/run_trackA_p1_smooth_k5.sh`（`--smooth-llm-samples 5`，全矩阵 3 seeds；与主表 K=1 对照 `smooth_llm` 行） |
 | **P2** | 输出守卫消融 | `GATEWAY_OUTPUT_GUARD_URL` 配置后，`--gateway-output-guard` 跑子集 defenses，另存 `trackA_full_paper_guard_seed3.json` |
 | **P2** | 有害集规模 / 文献可比 | `scripts/fetch_advbench_subset.py` 扩大 `harmful_prompts_trackA_en.txt`，**更新 SHA256** 与附录表 |
 | **P3** | HPM 全文基准 | 在合规前提下替换 `hpm_proxy_prompts_en.txt` 为许可的 HPM 子集，并声明非代理 |
@@ -164,7 +164,7 @@ python3 experiments/scripts/validate_paper_json.py results/trackA_full_paper_see
 
 ```bash
 # 终端 C：python experiments/judge_service/server.py （按 README 配 JUDGE_BACKEND）
-export PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/v1/judge
+export PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/judge
 set -a && . ./env && set +a
 python3 experiments/run_paper_benchmark.py \
   --gateway-url http://127.0.0.1:8080 --upstream-url https://api.deepseek.com \

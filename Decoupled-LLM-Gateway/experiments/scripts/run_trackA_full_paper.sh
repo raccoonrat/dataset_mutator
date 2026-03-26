@@ -25,45 +25,20 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-if [[ -f ./env ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  . ./env
-  set +a
-fi
+# shellcheck source=/dev/null
+source "$ROOT/experiments/scripts/paper_common.sh"
+paper_source_env_if_present
 GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:8080}"
 UP="${GATEWAY_UPSTREAM:-https://api.deepseek.com}"
 OUT="${OUT:-results/trackA_full_paper_seed3.json}"
 MODEL="${OPENAI_MODEL:-deepseek-chat}"
 SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
 
-preflight_gateway() {
-  local body resp
-  body=$(printf '%s' "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: OK\"}]}")
-  if ! resp=$(curl -sS -m 180 "${GATEWAY_URL}/v1/chat/completions" \
-    -H 'Content-Type: application/json' -d "$body"); then
-    echo "PREFLIGHT FAIL: cannot reach ${GATEWAY_URL}/v1/chat/completions (start gateway first?)" >&2
-    return 1
-  fi
-  if echo "$resp" | grep -q '\[echo\]'; then
-    echo "PREFLIGHT FAIL: gateway reply contains [echo] — GATEWAY_UPSTREAM is probably still echo-llm." >&2
-    echo "Fix: in the same shell as the gateway, set GATEWAY_UPSTREAM to your real API (see .env), restart gateway, re-run." >&2
-    return 1
-  fi
-  echo "PREFLIGHT OK: gateway returned non-echo completion (first ~120 chars):"
-  echo "$resp" | head -c 120
-  echo "..."
-}
-
-case "$UP" in
-  *127.0.0.1:9090*|*localhost:9090*|:9090*)
-    echo "REFUSE: GATEWAY_UPSTREAM=$UP looks like echo-llm. For paper JSON, point at a real OpenAI-compatible API." >&2
-    exit 1
-    ;;
-esac
+paper_refuse_echo_upstream_url "$UP" || exit 1
 
 if [[ "$SKIP_PREFLIGHT" != "1" ]]; then
-  preflight_gateway
+  export PAPER_PREFLIGHT_SHOW_SAMPLE=1
+  paper_preflight_non_echo || exit 1
 fi
 
 DEFS="unified,no_obfuscate,no_decoy,intent_only,direct_upstream,smooth_llm,structured_wrap,strong_system_guard,rag_semantic_only"

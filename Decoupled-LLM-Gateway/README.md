@@ -335,6 +335,8 @@ python3 experiments/run_paper_benchmark.py --suite full \
 
 **一键主表（P0，含预检 / 校验 / 更新 `paper/generated/*.tex`）**：复制 [`env.example`](env.example) 为 **`env`**（已 `.gitignore`），填好 **`GATEWAY_UPSTREAM` 为真实 HTTPS API** 与密钥；用 **` . ./env`** 启动网关后执行 **`bash experiments/scripts/run_trackA_full_paper.sh`**。脚本会拒绝在网关仍返回 `[echo]` 时继续跑。详细清单：[`experiments/P0_REAL_UPSTREAM_CHECKLIST.md`](experiments/P0_REAL_UPSTREAM_CHECKLIST.md)。
 
+**P1 补充**：HTTP 裁判子集（内置启 `judge_service`）— `bash experiments/scripts/run_trackA_p1_http_judge_subset.sh`；SmoothLLM **K>1** 全矩阵 — `bash experiments/scripts/run_trackA_p1_smooth_k5.sh`（成本高，与主表 `smooth_llm` K=1 对照）。共享预检逻辑：`experiments/scripts/paper_common.sh`。
+
 **Track B**（GCG、表征对齐 PBU）不在本脚本内。本地自检：`make paper-eval-check`。
 
 **正式实验流水线（验证论文主张、产出主表 JSON、数据流说明）：** 见 [`experiments/PIPELINE_FORMAL_DATA.md`](experiments/PIPELINE_FORMAL_DATA.md)。**实验目标、能力边界、JSON→论文：** 见 [`experiments/EXPERIMENT_PLAYBOOK_CN.md`](experiments/EXPERIMENT_PLAYBOOK_CN.md)。`direct_upstream` 基线直连 DeepSeek/OpenAI 时，脚本会从 `DEEPSEEK_API_KEY` / `GATEWAY_UPSTREAM_API_KEY` / `OPENAI_API_KEY` 读取 Bearer。

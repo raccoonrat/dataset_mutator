@@ -226,3 +226,6 @@ __marimo__/
 *-blx.bib
 
 env
+
+# Local Go gateway binaries (go build -o bin/)
+Decoupled-LLM-Gateway/bin/

@@ -47,3 +47,8 @@
 | `PREFLIGHT FAIL: ... [echo]` | 网关进程的 `GATEWAY_UPSTREAM` 仍为 echo；未用 `. ./env` 启动或改后未重启网关 |
 | `REFUSE: GATEWAY_UPSTREAM=...9090` | `env` 里上游填成 echo；改为 HTTPS API 根 URL |
 | 脚本很慢 | 正常；全矩阵 × 多种子 × 真实 API |
+
+## P1（续）
+
+- **HTTP 裁判子集**：`bash experiments/scripts/run_trackA_p1_http_judge_subset.sh`（需网关已按上文 P0 就绪）。  
+- **SmoothLLM K>1 全矩阵**：`bash experiments/scripts/run_trackA_p1_smooth_k5.sh`（成本高；输出与主表 K=1 对照 `smooth_llm` 行）。
