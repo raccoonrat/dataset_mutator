@@ -15,13 +15,13 @@ pdf: $(MAIN_CN).pdf
 
 pdf-en: $(MAIN_EN).pdf
 
-$(MAIN_CN).pdf: $(MAIN_CN).tex usenix-2020-09.sty ArchitecturalReconstruction_ControlledMutation.bib
+$(MAIN_CN).pdf: $(MAIN_CN).tex generated/trackA_main_table_cn.tex usenix-2020-09.sty ArchitecturalReconstruction_ControlledMutation.bib
 	$(LATEX) -interaction=nonstopmode -file-line-error $(MAIN_CN).tex
 	$(BIB) $(MAIN_CN)
 	$(LATEX) -interaction=nonstopmode -file-line-error $(MAIN_CN).tex
 	$(LATEX) -interaction=nonstopmode -file-line-error $(MAIN_CN).tex
 
-$(MAIN_EN).pdf: $(MAIN_EN).tex usenix-2020-09.sty ArchitecturalReconstruction_ControlledMutation.bib
+$(MAIN_EN).pdf: $(MAIN_EN).tex generated/trackA_main_table.tex usenix-2020-09.sty ArchitecturalReconstruction_ControlledMutation.bib
 	$(LATEX) -interaction=nonstopmode -file-line-error $(MAIN_EN).tex
 	$(BIB) $(MAIN_EN)
 	$(LATEX) -interaction=nonstopmode -file-line-error $(MAIN_EN).tex

@@ -224,3 +224,5 @@ __marimo__/
 *.vrb
 *.xdv
 *-blx.bib
+
+env

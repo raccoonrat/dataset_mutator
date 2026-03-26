@@ -8,6 +8,9 @@
 **实验起步、能力边界与论文写作（展开说明）：**  
 [`Decoupled-LLM-Gateway/experiments/EXPERIMENT_PLAYBOOK_CN.md`](../Decoupled-LLM-Gateway/experiments/EXPERIMENT_PLAYBOOK_CN.md)
 
+**已有 JSON → 论文章节映射与提示文件 SHA256：**  
+[`paper/Data_Mapping_TrackA_to_Paper.md`](Data_Mapping_TrackA_to_Paper.md)
+
 ---
 
 ## 1. 对齐关系（论文目标 → 代码）

@@ -110,6 +110,8 @@ make smoke-output-guard
 2. `DEEPSEEK_API_KEY`
 3. `OPENAI_API_KEY`
 
+若仓库根目录有本机 **`env` 文件**（已加入 `.gitignore`），可在 **`Decoupled-LLM-Gateway/`** 下先执行 **` . ./env`** 再启动网关与跑 `experiments/scripts/run_trackA_full_paper.sh`，避免密钥散落在命令行。全量真实上游评测脚本会自动 `source ./env`（若文件存在）。
+
 ### 2.2 启动网关（以 DeepSeek 为例）
 
 ```bash
