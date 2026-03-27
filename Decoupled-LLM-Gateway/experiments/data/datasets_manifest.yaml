@@ -1,4 +1,6 @@
 # Track A/B evaluation datasets — machine-readable taxonomy aligned with the paper
+# Materialize text files: bash experiments/scripts/fetch_all_paper_datasets.sh
+# (requires: pip install -r experiments/requirements-benchmark.txt)
 # (BeyondModelReflection_DecoupledSafety) Table "Dataset taxonomy: asset type × interaction".
 # Fields: name, asset_type, interaction, metrics_supported, threat_model_fit, notes (optional).
 

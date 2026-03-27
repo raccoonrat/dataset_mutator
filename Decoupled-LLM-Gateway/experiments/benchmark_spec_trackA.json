@@ -1,11 +1,13 @@
 {
   "name": "DecoupledSafety-TrackA-Benchmark",
   "paper_section": "BeyondModelReflection §5 (evaluation)",
-  "protocol_version": "paper-eval-4",
+  "protocol_version": "paper-eval-5",
   "tracks": ["A"],
   "primary_metrics": [
     {"id": "rsr", "definition": "Refusal success on harmful / policy-violating prompts (request-level)", "direction": "maximize_on_attack_prompts"},
-    {"id": "harmful_rsr_rate", "definition": "Mean RSR over versioned harmful single-turn file (AdvBench-style)", "direction": "maximize"},
+    {"id": "harmful_rsr_rate", "definition": "Mean RSR over versioned harmful single-turn file (JBB-Behaviors misuse preferred; AdvBench-compatible)", "direction": "maximize"},
+    {"id": "wild_rsr_rate", "definition": "Mean RSR on in-the-wild jailbreak prompt sample", "direction": "maximize"},
+    {"id": "strongreject_rsr_rate", "definition": "Mean RSR on StrongREJECT forbidden_prompt list (pair with evaluator rubric for empty-jailbreak control)", "direction": "maximize"},
     {"id": "asr_extraction", "definition": "Secret / system exfiltration success", "direction": "minimize"},
     {"id": "extraction_f1", "definition": "Token-F1 vs reference secret", "direction": "minimize"},
     {"id": "improper_refusal_rate", "definition": "Benign prompts classified as refusal (FPR proxy)", "direction": "minimize"},
@@ -32,9 +34,14 @@
     }
   },
   "prompt_caps": {
-    "cli": ["--max-harmful-prompts", "--max-benign-fpr-prompts"],
-    "manifest_keys": ["max_harmful_prompts", "max_benign_fpr_prompts"],
-    "scenarios_affected": ["harmful_rsr_suite", "benign_fpr_suite"]
+    "cli": ["--max-harmful-prompts", "--max-benign-fpr-prompts", "--max-wild-prompts", "--max-strongreject-prompts"],
+    "manifest_keys": ["max_harmful_prompts", "max_benign_fpr_prompts", "max_wild_prompts", "max_strongreject_prompts"],
+    "scenarios_affected": ["harmful_rsr_suite", "benign_fpr_suite", "wild_rsr_suite", "strongreject_rsr_suite"]
+  },
+  "manifest": {
+    "dataset_profile_cli": "--dataset-profile",
+    "prompt_sha_manifest_key": "prompt_artifacts",
+    "optional_paths": ["--wild-prompts-file", "--strongreject-prompts-file", "--cra-session-json"]
   },
   "gateway_output_guard": {
     "cli_flag": "--gateway-output-guard",
@@ -58,10 +65,19 @@
     "extraction_aggregate": "max_f1_and_any_leak_across_samples"
   },
   "data_assets": [
-    {"path": "experiments/data/harmful_prompts_trackA_en.txt", "role": "harmful_rsr_suite default"},
-    {"path": "experiments/data/benign_prompts_en.txt", "role": "benign_fpr_suite default"},
+    {"path": "experiments/data/jbb_misuse_100_en.txt", "role": "JBB-Behaviors misuse (100) for harmful_rsr_suite"},
+    {"path": "experiments/data/jbb_benign_100_en.txt", "role": "JBB-Behaviors benign (100) for benign_fpr_suite paired reporting"},
+    {"path": "experiments/data/harmful_prompts_trackA_en.txt", "role": "legacy harmful fallback (AdvBench-style)"},
+    {"path": "experiments/data/benign_prompts_en.txt", "role": "legacy benign FPR fallback"},
+    {"path": "experiments/data/wild_jailbreak_first200_en.txt", "role": "in-the-wild sample for wild_rsr_suite"},
+    {"path": "experiments/data/strongreject_forbidden_en.txt", "role": "StrongREJECT forbidden_prompt list"},
+    {"path": "experiments/data/cra_example_session.json", "role": "CRA format example for multi_round_extraction"},
     {"path": "experiments/data/hpm_proxy_prompts_en.txt", "role": "hpm_proxy default"},
-    {"script": "experiments/scripts/fetch_advbench_subset.py", "role": "optional larger harmful list from public AdvBench CSV"}
+    {"script": "experiments/scripts/fetch_jbb_behaviors.py", "role": "materialize JBB-Behaviors from Hugging Face"},
+    {"script": "experiments/scripts/fetch_strongreject_prompts.py", "role": "StrongREJECT CSV to lines"},
+    {"script": "experiments/scripts/fetch_wild_jailbreak_sample.py", "role": "in-the-wild sample"},
+    {"script": "experiments/scripts/fetch_advbench_subset.py", "role": "optional AdvBench CSV subset"},
+    {"script": "experiments/scripts/fetch_all_paper_datasets.sh", "role": "orchestrate all fetches"}
   ],
   "defense_baselines": [
     {"id": "unified", "paper_ref": "§5.4 unified architecture"},
@@ -80,15 +96,17 @@
     {"id": "benign_baseline", "minimal_bundle_axis": "utility"},
     {"id": "multi_round_extraction", "minimal_bundle_axis": "(i) information economics"},
     {"id": "harmful_rsr_suite", "paper_ref": "§5.3 attack (7)", "minimal_bundle_axis": "RSR / SOTA-comparable harmful set"},
+    {"id": "wild_rsr_suite", "paper_ref": "§5.3 attack (8) in-the-wild", "minimal_bundle_axis": "real-world prompt drift"},
+    {"id": "strongreject_rsr_suite", "paper_ref": "StrongREJECT benchmark (§5.6 empty jailbreak)", "minimal_bundle_axis": "ASR/RSR with evaluator rubric"},
     {"id": "hpm_proxy", "minimal_bundle_axis": "(ii) value / HPM pressure proxy"},
     {"id": "benign_fpr_suite", "minimal_bundle_axis": "FPR / utility"},
     {"id": "decoy_dos_sla", "minimal_bundle_axis": "decoy DoS / SLA"}
   ],
   "out_of_scope_in_artifact": [
-    "Track B: GCG, representation-aligned PBU",
-    "Full Llama-Guard / StrongREJECT API judge ensemble",
+    "Track B: white-box GCG / AutoDAN runs (gradient access; separate lab harness)",
+    "Full PAIR attack loop (low-query generator; use PAIR-produced prompts as files if needed)",
     "Joint-key retrieval with activation vectors",
     "n>=5 distribution-based judge consensus with Clopper-Pearson gating"
   ],
-  "sota_comparison_note": "Compare reported deltas against StruQ (USENIX Sec 2024), SmoothLLM (ICLR 2024), and guard-only baselines using the same model ID and budgets; harmful_rsr_suite scales with AdvBench-style prompt files for alignment with jailbreak literature."
+  "sota_comparison_note": "Primary tables: JBB-Behaviors misuse+benign for joint RSR and benign FPR; optional wild_rsr_suite and strongreject_rsr_suite; compare with AdvBench/GCG literature using same model ID and budgets."
 }

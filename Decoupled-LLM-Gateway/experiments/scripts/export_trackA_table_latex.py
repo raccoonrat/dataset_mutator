@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit a USENIX-style LaTeX table from paper-eval-4 JSON (aggregate_by_defense + manifest)."""
+"""Emit a USENIX-style LaTeX table from paper-eval-4/5 JSON (aggregate_by_defense + manifest)."""
 from __future__ import annotations
 
 import argparse

@@ -30,26 +30,28 @@ def _goals_from_hf() -> tuple[list[str], list[str]]:
 
     last_err: Exception | None = None
     for repo in ("JailbreakBench/JBB-Behaviors", "dedeswim/JBB-Behaviors"):
-        for loader in (
-            lambda r: (  # noqa: E731
-                load_dataset(r, "behaviors", split="harmful"),
-                load_dataset(r, "behaviors", split="benign"),
-            ),
-            lambda r: (
-                load_dataset(r, split="harmful"),
-                load_dataset(r, split="benign"),
-            ),
-        ):
+        harmful = None
+        benign = None
+        try:
+            harmful = load_dataset(repo, "behaviors", split="harmful")
+            benign = load_dataset(repo, "behaviors", split="benign")
+        except Exception as e1:  # noqa: BLE001
+            last_err = e1
             try:
-                harmful, benign = loader(repo)
-                hg = [str(x).strip() for x in harmful["Goal"]]
-                bg = [str(x).strip() for x in benign["Goal"]]
-                hg = [x for x in hg if x]
-                bg = [x for x in bg if x]
-                return hg, bg
-            except Exception as e:  # noqa: BLE001
-                last_err = e
+                harmful = load_dataset(repo, split="harmful")
+                benign = load_dataset(repo, split="benign")
+            except Exception as e2:  # noqa: BLE001
+                last_err = e2
                 continue
+        try:
+            hg = [str(x).strip() for x in harmful["Goal"]]
+            bg = [str(x).strip() for x in benign["Goal"]]
+            hg = [x for x in hg if x]
+            bg = [x for x in bg if x]
+            return hg, bg
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
     raise RuntimeError(f"Could not load JBB-Behaviors from HF; last error: {last_err!r}")
 
 

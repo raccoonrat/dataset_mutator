@@ -244,11 +244,15 @@ flowchart LR
 
 ---
 
-## 论文实验数据（Track A，`paper-eval-4`）
+## 论文实验数据（Track A，`paper-eval-5`）
 
 与《Beyond Model Reflection / 解耦安全》**§5** 及论文 **「参考实现与实证验证」**（`sec:eval-artifact`）对齐：脚本 `experiments/run_paper_benchmark.py` 输出 **JSON manifest + `runs[]`**，用于**真实上游**下的主表数据；`echo-llm` 用于低成本消融与 CI。
 
-**`paper-eval-4`（相对 v3）**：`smooth_llm` 防御下支持 **`--smooth-llm-samples K`**（ICLR’24 SmoothLLM 式：每轮 K 次随机空白扰动 + 独立补全；RSR 类指标**多数票**，抽取类取 **max F1 / any leak**）；`manifest` 含 `smooth_llm_samples_k` / `smooth_llm_sigma`。配套 **HTTP 裁判微服务** `experiments/judge_service/server.py`（stdlib，无额外依赖），供 `--judge-mode http` 与 `PAPER_EVAL_JUDGE_URL` 使用；`JUDGE_BACKEND=openai_moderation` 时可用 OpenAI Moderations API 辅助判定（需 `OPENAI_API_KEY`）。
+**`paper-eval-5`（相对 v4）**：在 v4 的 SmoothLLM K 采样、HTTP 裁判、输出守卫头、`manifest` 字段基础上，增加 **SOTA 评测数据管线**：`fetch_jbb_behaviors.py`（JBB-Behaviors misuse/benign）、`fetch_strongreject_prompts.py`、`fetch_wild_jailbreak_sample.py`；主脚本支持 **`wild_rsr_suite` / `strongreject_rsr_suite`**、`manifest.prompt_artifacts`（各提示文件 SHA256）、**`--cra-session-json`**（CRA 格式多轮）、**`--dataset-profile`**。`experiments/data/datasets_manifest.yaml` 与论文「资产类型 × 交互形态」表一致。
+
+**`paper-eval-4` 兼容**：`manifest.protocol_version` 若为历史 JSON 仍为 `paper-eval-4`；新跑统一为 `paper-eval-5`。
+
+**`paper-eval-4` 能力保留**：`smooth_llm` 下 **`--smooth-llm-samples K`**；**HTTP 裁判** `experiments/judge_service/server.py`；`JUDGE_BACKEND=openai_moderation` 等。
 
 v3 已含：标准有害单轮集 `harmful_rsr_suite`、HTTP 裁判协议、`JudgeConfig` 统一路径。
 
@@ -271,7 +275,9 @@ v3 已含：标准有害单轮集 `harmful_rsr_suite`、HTTP 裁判协议、`Jud
 | 论文对应 | `scenario_id` | 输出要点 |
 |----------|-----------------|----------|
 | RSR / 有害拒绝 | `refusal_keyword` | `rsr` |
-| §5 攻击 (7) 标准有害集 RSR | `harmful_rsr_suite` | `harmful_rsr_rate`，默认 `experiments/data/harmful_prompts_trackA_en.txt`；可 `experiments/scripts/fetch_advbench_subset.py` 拉取 AdvBench 子集 |
+| §5 攻击 (7) 标准有害集 RSR | `harmful_rsr_suite` | `harmful_rsr_rate`；**推荐** `fetch_jbb_behaviors.py` → `jbb_misuse_100_en.txt`；或 `fetch_advbench_subset.py`（AdvBench） |
+| §5 攻击 (8) in-the-wild | `wild_rsr_suite` | `wild_rsr_rate`，需 `--wild-prompts-file`（如 `fetch_wild_jailbreak_sample.py`） |
+| StrongREJECT 提示集 RSR | `strongreject_rsr_suite` | `strongreject_rsr_rate`，需 `--strongreject-prompts-file`（`fetch_strongreject_prompts.py`）；配合 StrongREJECT 评估器控制空越狱 |
 | 单轮抽取 ASR、F1 | `extraction_leak` | `asr_extraction`, `extraction_f1` |
 | 良性效用 / FPR 代理 | `benign_baseline` | `rsr` 应为 false |
 | 最小实验包 (i) 多轮经济 | `multi_round_extraction` | `rounds[]`, `max_f1`, `rounds_to_f1_ge_tau` |

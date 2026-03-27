@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Heuristic checks on paper-eval-4 JSON: echo vs real upstream, latency sanity, manifest consistency."""
+"""Heuristic checks on paper-eval-4/5 JSON: echo vs real upstream, latency sanity, manifest consistency."""
 from __future__ import annotations
 
 import argparse

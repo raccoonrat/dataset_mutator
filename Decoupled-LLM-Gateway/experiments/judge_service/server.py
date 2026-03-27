@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Minimal HTTP refusal judge for run_paper_benchmark.py --judge-mode http (paper-eval-4).
+Minimal HTTP refusal judge for run_paper_benchmark.py --judge-mode http (paper-eval-5).
 
 Contract (POST JSON, any path):
   {"task": "refusal_binary", "user": "<prompt>", "assistant": "<model output>"}
