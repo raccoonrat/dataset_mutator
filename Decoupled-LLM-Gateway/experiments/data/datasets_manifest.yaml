@@ -1,0 +1,54 @@
+# Track A/B evaluation datasets — machine-readable taxonomy aligned with the paper
+# (BeyondModelReflection_DecoupledSafety) Table "Dataset taxonomy: asset type × interaction".
+# Fields: name, asset_type, interaction, metrics_supported, threat_model_fit, notes (optional).
+
+- name: JBB-Behaviors (JailbreakBench)
+  asset_type: behavioral_constraints
+  interaction: single_turn_blackbox
+  metrics_supported: [RSR, ASR, benign_FPR]
+  threat_model_fit: Track_A
+  notes: "100 misuse + 100 benign; policy-aligned taxonomy."
+
+- name: AdvBench-compatible targets
+  asset_type: behavioral_constraints
+  interaction: single_turn_whitebox
+  metrics_supported: [ASR, RSR]
+  threat_model_fit: Track_B
+  notes: "GCG / AutoDAN reproduction compatibility."
+
+- name: StrongREJECT benchmark
+  asset_type: behavioral_constraints
+  interaction: single_turn_blackbox
+  metrics_supported: [ASR, empty_jailbreak_mitigation]
+  threat_model_fit: Track_A
+  notes: "Evaluator protocol; 313 malicious prompts (see StrongREJECT paper)."
+
+- name: In-the-wild jailbreak prompts
+  asset_type: prompt_strategy_artifacts
+  interaction: single_turn_blackbox
+  metrics_supported: [ASR, distribution_shift]
+  threat_model_fit: Track_A
+
+- name: PAIR-generated attacks
+  asset_type: prompt_strategy_artifacts
+  interaction: single_turn_blackbox
+  metrics_supported: [ASR, query_cost]
+  threat_model_fit: Track_A
+
+- name: Conversation Reconstruction Attack (CRA) format
+  asset_type: hidden_context
+  interaction: multi_turn_stateful
+  metrics_supported: [final_turn_F1, session_max_F1, round_distribution]
+  threat_model_fit: [Track_A, Track_B]
+
+- name: SPE-LLM (system prompt extraction)
+  asset_type: system_configuration
+  interaction: multi_turn_extraction
+  metrics_supported: [F1, extraction_success]
+  threat_model_fit: [Track_A, Track_B]
+
+- name: HPM / psychological manipulation suites
+  asset_type: psychological_state
+  interaction: multi_turn_stateful
+  metrics_supported: [ASR, pressure_proxies]
+  threat_model_fit: Track_A

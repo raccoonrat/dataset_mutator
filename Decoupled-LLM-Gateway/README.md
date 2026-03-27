@@ -122,6 +122,12 @@ go run ./cmd/gateway
 
 ---
 
+## Track A/B 评测数据集清单（论文对齐）
+
+与论文《Beyond Model Reflection: Decoupled Safety…》中 **「资产类型 × 交互形态」** 二维分类表一致，本仓库在 `experiments/data/datasets_manifest.yaml` 维护机器可读的评测数据源条目（字段含 `name`、`asset_type`、`interaction`、`metrics_supported`、`threat_model_fit` 等），便于 Artifact Evaluation 与复现脚本引用。具体提示文件与 SHA 见 `paper/Data_Mapping_TrackA_to_Paper.md` 及论文附录哈希表。
+
+---
+
 ## 核心数据契约（API 边界）
 
 网关与异步环 **只通过约定字段通信**，避免隐式耦合。
@@ -336,6 +342,8 @@ python3 experiments/run_paper_benchmark.py --suite full \
 **一键主表（P0，含预检 / 校验 / 更新 `paper/generated/*.tex`）**：复制 [`env.example`](env.example) 为 **`env`**（已 `.gitignore`），填好 **`GATEWAY_UPSTREAM` 为真实 HTTPS API** 与密钥；用 **` . ./env`** 启动网关后执行 **`bash experiments/scripts/run_trackA_full_paper.sh`**。脚本会拒绝在网关仍返回 `[echo]` 时继续跑。详细清单：[`experiments/P0_REAL_UPSTREAM_CHECKLIST.md`](experiments/P0_REAL_UPSTREAM_CHECKLIST.md)。
 
 **P1 补充**：HTTP 裁判子集（内置启 `judge_service`）— `bash experiments/scripts/run_trackA_p1_http_judge_subset.sh`；SmoothLLM **K>1** 全矩阵 — `bash experiments/scripts/run_trackA_p1_smooth_k5.sh`（成本高，与主表 `smooth_llm` K=1 对照）。共享预检逻辑：`experiments/scripts/paper_common.sh`。
+
+**P2（有害集 AdvBench + 输出守卫）**：`python3 experiments/scripts/fetch_advbench_subset.py -n 80 -o experiments/data/harmful_prompts_trackA_en.txt` 后重跑主表；在 `env` 中配置 `GATEWAY_OUTPUT_GUARD_URL`（如 `http://127.0.0.1:8766/judge`）并重启网关后执行 **`bash experiments/scripts/run_trackA_p2_output_guard.sh`**（`--variant guard` 导出 `paper/generated/trackA_guard_table*.tex`）。详见 [`experiments/P0_REAL_UPSTREAM_CHECKLIST.md`](experiments/P0_REAL_UPSTREAM_CHECKLIST.md) §P2。
 
 **Track B**（GCG、表征对齐 PBU）不在本脚本内。本地自检：`make paper-eval-check`。
 

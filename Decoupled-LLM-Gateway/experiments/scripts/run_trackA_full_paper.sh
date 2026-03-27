@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Full Track A matrix (paper-eval-4): 9 defenses × full suite × 3 seeds, no prompt caps.
+# Full Track A matrix (paper-eval-5): JBB-Behaviors misuse/benign (paired FPR) + optional wild + StrongREJECT;
+# 9 defenses × full scenario suite × 3 seeds, no prompt caps on core suites.
 #
 # Usage (from repo root or Decoupled-LLM-Gateway/):
 #   ./experiments/scripts/run_trackA_full_paper.sh
@@ -17,12 +18,15 @@
 #   OUT                  default results/trackA_full_paper_seed3.json
 #   OPENAI_MODEL         default deepseek-chat
 #   SKIP_PREFLIGHT       set to 1 to skip gateway probe (not recommended for real-paper runs)
+#   SKIP_FETCH_DATASETS  set to 1 to skip HuggingFace/network dataset fetch (use existing files)
+#   HARMFUL_PROMPTS_FILE / BENIGN_PROMPTS_FILE  override default JBB paths
 #
 # Local secrets / upstream (optional): place a file ./env in this repo root and run
 #   cd Decoupled-LLM-Gateway && . ./env && ./experiments/scripts/run_trackA_full_paper.sh
 # This script auto-sources ./env when present (exports all variables defined there).
 
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 # shellcheck source=/dev/null
@@ -36,6 +40,35 @@ SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
 
 paper_refuse_echo_upstream_url "$UP" || exit 1
 
+if [[ "${SKIP_FETCH_DATASETS:-0}" != "1" ]]; then
+  if ! python3 -c "import datasets" 2>/dev/null; then
+    pip install -q -r experiments/requirements-benchmark.txt || {
+      echo "WARN: could not pip install datasets; run: bash experiments/scripts/fetch_all_paper_datasets.sh" >&2
+    }
+  fi
+  python3 experiments/scripts/fetch_jbb_behaviors.py \
+    --misuse-out "$ROOT/experiments/data/jbb_misuse_100_en.txt" \
+    --benign-out "$ROOT/experiments/data/jbb_benign_100_en.txt" || {
+    echo "WARN: JBB fetch failed; falling back to repo harmful/benign lists if present." >&2
+  }
+  python3 experiments/scripts/fetch_strongreject_prompts.py -o "$ROOT/experiments/data/strongreject_forbidden_en.txt" || true
+  python3 experiments/scripts/fetch_wild_jailbreak_sample.py -n "${WILD_SAMPLE_N:-200}" \
+    -o "$ROOT/experiments/data/wild_jailbreak_first200_en.txt" || true
+fi
+
+HARMFUL="${HARMFUL_PROMPTS_FILE:-$ROOT/experiments/data/jbb_misuse_100_en.txt}"
+BENIGN="${BENIGN_PROMPTS_FILE:-$ROOT/experiments/data/jbb_benign_100_en.txt}"
+if [[ ! -f "$HARMFUL" ]]; then HARMFUL="$ROOT/experiments/data/harmful_prompts_trackA_en.txt"; fi
+if [[ ! -f "$BENIGN" ]]; then BENIGN="$ROOT/experiments/data/benign_prompts_en.txt"; fi
+
+SCENARIOS="benign_baseline,refusal_keyword,extraction_leak,multi_round_extraction,harmful_rsr_suite,hpm_proxy,benign_fpr_suite,decoy_dos_sla"
+if [[ -f "$ROOT/experiments/data/wild_jailbreak_first200_en.txt" ]]; then
+  SCENARIOS="${SCENARIOS},wild_rsr_suite"
+fi
+if [[ -f "$ROOT/experiments/data/strongreject_forbidden_en.txt" ]]; then
+  SCENARIOS="${SCENARIOS},strongreject_rsr_suite"
+fi
+
 if [[ "$SKIP_PREFLIGHT" != "1" ]]; then
   export PAPER_PREFLIGHT_SHOW_SAMPLE=1
   paper_preflight_non_echo || exit 1
@@ -47,7 +80,15 @@ python3 experiments/run_paper_benchmark.py \
   --gateway-url "$GATEWAY_URL" \
   --upstream-url "$UP" \
   --defenses "$DEFS" \
-  --suite full \
+  --suite minimal \
+  --scenarios "$SCENARIOS" \
+  --harmful-prompts-file "$HARMFUL" \
+  --benign-prompts-file "$BENIGN" \
+  --wild-prompts-file "$ROOT/experiments/data/wild_jailbreak_first200_en.txt" \
+  --strongreject-prompts-file "$ROOT/experiments/data/strongreject_forbidden_en.txt" \
+  --dataset-profile jbb_paired_sota \
+  --max-wild-prompts "${MAX_WILD_PROMPTS:-200}" \
+  --max-strongreject-prompts "${MAX_STRONGREJECT_PROMPTS:-100}" \
   --seeds 42,43,44 \
   --judge-mode heuristic \
   --openai-model "$MODEL" \

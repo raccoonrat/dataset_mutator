@@ -13,7 +13,7 @@
 
 | 文件 | SHA256（全小写十六进制） | 非注释行数 |
 |------|--------------------------|------------|
-| `Decoupled-LLM-Gateway/experiments/data/harmful_prompts_trackA_en.txt` | `1394752d0697d354cbd75ed990dc7c0cdcc3e546da832d38a4f63e369a22a82c` | 8 |
+| `Decoupled-LLM-Gateway/experiments/data/harmful_prompts_trackA_en.txt` | `55f1281e97d7fd839d6d707ae66a6857ae54dd7cfded994d76fe13dd1bfcc568` | 80 |
 | `Decoupled-LLM-Gateway/experiments/data/benign_prompts_en.txt` | `39c48b0022a89514542d2e7f141ad54ccbecf30817cdb34efc03e1ff3f048917` | 10 |
 | `Decoupled-LLM-Gateway/experiments/data/hpm_proxy_prompts_en.txt` | `67b5ac7b36cf8cfcad64319715057268abd38be2a71d7049ac16418fe856a51d` | 5 |
 
@@ -141,8 +141,8 @@ python3 experiments/scripts/export_trackA_table_latex.py \
 | **P0** | 保证主表可信 | 修正网关上游后**重跑** `run_trackA_full_paper.sh`；`validate_paper_json.py` 通过；重新 `export_trackA_table_latex.py` |
 | **P1** | 论文 §5「HTTP 裁判」 | 一键子集：`Decoupled-LLM-Gateway/experiments/scripts/run_trackA_p1_http_judge_subset.sh`（内置启 judge、预检、validate）；或手动启动 `judge_service` 后设 `PAPER_EVAL_JUDGE_URL=http://127.0.0.1:8765/judge` |
 | **P1** | SmoothLLM 分布评估（K>1） | `experiments/scripts/run_trackA_p1_smooth_k5.sh`（`--smooth-llm-samples 5`，全矩阵 3 seeds；与主表 K=1 对照 `smooth_llm` 行） |
-| **P2** | 输出守卫消融 | `GATEWAY_OUTPUT_GUARD_URL` 配置后，`--gateway-output-guard` 跑子集 defenses，另存 `trackA_full_paper_guard_seed3.json` |
-| **P2** | 有害集规模 / 文献可比 | `scripts/fetch_advbench_subset.py` 扩大 `harmful_prompts_trackA_en.txt`，**更新 SHA256** 与附录表 |
+| **P2** | 输出守卫消融 | `experiments/scripts/run_trackA_p2_output_guard.sh`：网关须带 `GATEWAY_OUTPUT_GUARD_URL` 指向同机 `judge_service`；`--gateway-output-guard`，默认输出 `results/trackA_full_paper_guard_seed3.json` |
+| **P2** | 有害集规模 / 文献可比 | `experiments/scripts/fetch_advbench_subset.py -n 80` 写入 `harmful_prompts_trackA_en.txt` 后重跑主表脚本；**更新 SHA256** 与附录表 |
 | **P3** | HPM 全文基准 | 在合规前提下替换 `hpm_proxy_prompts_en.txt` 为许可的 HPM 子集，并声明非代理 |
 | **P3** | 第二模型 | 换 `gpt-4o-mini` 等再跑一套 JSON，附录多一行「模型敏感性」 |
 

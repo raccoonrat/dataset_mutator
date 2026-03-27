@@ -1,0 +1,4 @@
+# Optional deps for paper dataset fetch scripts (JBB-Behaviors via Hugging Face datasets).
+#   pip install -r experiments/requirements-benchmark.txt
+datasets>=2.14.0
+pandas>=1.5.0

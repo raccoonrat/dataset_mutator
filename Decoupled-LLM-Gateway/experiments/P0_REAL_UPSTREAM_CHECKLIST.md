@@ -52,3 +52,8 @@
 
 - **HTTP 裁判子集**：`bash experiments/scripts/run_trackA_p1_http_judge_subset.sh`（需网关已按上文 P0 就绪）。  
 - **SmoothLLM K>1 全矩阵**：`bash experiments/scripts/run_trackA_p1_smooth_k5.sh`（成本高；输出与主表 K=1 对照 `smooth_llm` 行）。
+
+## P2
+
+1. **有害集（AdvBench 80）**：`python3 experiments/scripts/fetch_advbench_subset.py -n 80 -o experiments/data/harmful_prompts_trackA_en.txt`，更新附录表 SHA256 后**重跑主表**：`bash experiments/scripts/run_trackA_full_paper.sh`。  
+2. **输出守卫消融**：在 `env` 中设置 `GATEWAY_OUTPUT_GUARD_URL=http://127.0.0.1:8766/judge`（及 `GATEWAY_OUTPUT_GUARD_*`），**重启网关**，再 `bash experiments/scripts/run_trackA_p2_output_guard.sh`。主进程网关与裁判 URL 必须一致。
