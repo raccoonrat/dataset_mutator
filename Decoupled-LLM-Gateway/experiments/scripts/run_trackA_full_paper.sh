@@ -16,6 +16,8 @@
 #   GATEWAY_URL          default http://127.0.0.1:8080
 #   GATEWAY_UPSTREAM     default https://api.deepseek.com (must match the *running* gateway process)
 #   OUT                  default results/trackA_full_paper_paper_eval5_<YYYYMMDD_HHMMSS>.json (unique per run)
+#   TRACKA_LATEST_LINK   default results/trackA_full_paper_latest.json — symlink updated after a successful benchmark run
+#   TRACKA_SKIP_LATEST_SYMLINK  set to 1 to skip creating/updating the symlink
 #   RESUME               set to 1 to pass --resume; you MUST also set OUT to the *same* path as the interrupted run
 #                        (checkpoint lives at <OUT-stem>.checkpoint.json next to OUT)
 #   CHECKPOINT           optional explicit path for --checkpoint (default is next to OUT)
@@ -23,6 +25,8 @@
 #   SKIP_PREFLIGHT       set to 1 to skip gateway probe (not recommended for real-paper runs)
 #   SKIP_FETCH_DATASETS  set to 1 to skip HuggingFace/network dataset fetch (use existing files)
 #   HARMFUL_PROMPTS_FILE / BENIGN_PROMPTS_FILE  override default JBB paths
+#   SKIP_CONDA_ACTIVATE  set to 1 to skip auto conda activate dataset_mutator
+#   TRACKA_PROGRESS_INTERVAL_SEC  seconds between [trackA] progress lines (default 300); 0 disables periodic logs
 #
 # Local secrets / upstream (optional): place a file ./env in this repo root and run
 #   cd Decoupled-LLM-Gateway && . ./env && ./experiments/scripts/run_trackA_full_paper.sh
@@ -32,6 +36,42 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+
+paper_activate_dataset_mutator() {
+  if [[ "${SKIP_CONDA_ACTIVATE:-0}" == "1" ]]; then
+    return 0
+  fi
+  if [[ "${CONDA_DEFAULT_ENV:-}" == "dataset_mutator" ]]; then
+    echo "[trackA] conda: already active dataset_mutator python=$(command -v python3)"
+    return 0
+  fi
+  local base sh
+  base=""
+  if command -v conda >/dev/null 2>&1; then
+    base="$(conda info --base 2>/dev/null)" || true
+  fi
+  if [[ -z "$base" && -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
+    base="${HOME}/anaconda3"
+  fi
+  if [[ -z "$base" && -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
+    base="${HOME}/miniconda3"
+  fi
+  sh="${base}/etc/profile.d/conda.sh"
+  if [[ ! -f "$sh" ]]; then
+    echo "ERROR: need conda env dataset_mutator; conda.sh not found. Run: conda activate dataset_mutator" >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$sh"
+  conda activate dataset_mutator || {
+    echo "ERROR: conda activate dataset_mutator failed" >&2
+    exit 1
+  }
+  echo "[trackA] conda: activated dataset_mutator python=$(command -v python3)"
+}
+
+paper_activate_dataset_mutator
+
 # shellcheck source=/dev/null
 source "$ROOT/experiments/scripts/paper_common.sh"
 paper_source_env_if_present
@@ -95,6 +135,32 @@ if [[ -n "${CHECKPOINT:-}" ]]; then
   CK_ARGS+=(--checkpoint "$CHECKPOINT")
 fi
 
+PROGRESS_SEC="${TRACKA_PROGRESS_INTERVAL_SEC:-300}"
+
+paper_core_progress_line() {
+  local pid="$1" bench_start="$2" tag="$3"
+  local now es h m s pe peh pem pes
+  now=$(date +%s)
+  es=$((now - bench_start))
+  h=$((es / 3600))
+  m=$(((es % 3600) / 60))
+  s=$((es % 60))
+  printf '[trackA] %s %s core_pid=%s script_elapsed_s=%d script_elapsed_hms=%02d:%02d:%02d' \
+    "$(date -Is)" "$tag" "${pid:-?}" "$es" "$h" "$m" "$s"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    pe=$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+    if [[ -n "$pe" && "$pe" =~ ^[0-9]+$ ]]; then
+      peh=$((pe / 3600))
+      pem=$(((pe % 3600) / 60))
+      pes=$((pe % 60))
+      printf ' process_elapsed_s=%s process_elapsed_hms=%02d:%02d:%02d' "$pe" "$peh" "$pem" "$pes"
+    fi
+  fi
+  printf '\n'
+}
+
+echo "[trackA] $(date -Is) benchmark_main_start out=$OUT"
+BENCH_START=$(date +%s)
 python3 experiments/run_paper_benchmark.py \
   --gateway-url "$GATEWAY_URL" \
   --upstream-url "$UP" \
@@ -112,9 +178,60 @@ python3 experiments/run_paper_benchmark.py \
   --judge-mode heuristic \
   --openai-model "$MODEL" \
   "${CK_ARGS[@]}" \
-  -o "$OUT"
+  -o "$OUT" &
+BENCH_PID=$!
+
+if [[ "$PROGRESS_SEC" =~ ^[0-9]+$ ]] && [[ "$PROGRESS_SEC" -gt 0 ]]; then
+  (
+    while kill -0 "$BENCH_PID" 2>/dev/null; do
+      sleep "$PROGRESS_SEC"
+      kill -0 "$BENCH_PID" 2>/dev/null || break
+      paper_core_progress_line "$BENCH_PID" "$BENCH_START" "core_progress"
+    done
+  ) &
+  PROG_PID=$!
+else
+  PROG_PID=""
+fi
+
+set +e
+wait "$BENCH_PID"
+BENCH_EXIT=$?
+set -e
+
+if [[ -n "${PROG_PID:-}" ]]; then
+  kill "$PROG_PID" 2>/dev/null || true
+  wait "$PROG_PID" 2>/dev/null || true
+fi
+
+now=$(date +%s)
+es=$((now - BENCH_START))
+h=$((es / 3600))
+m=$(((es % 3600) / 60))
+s=$((es % 60))
+printf '[trackA] %s benchmark_done core_pid=%s exit=%d script_elapsed_s=%d script_elapsed_hms=%02d:%02d:%02d\n' \
+  "$(date -Is)" "$BENCH_PID" "$BENCH_EXIT" "$es" "$h" "$m" "$s"
+
+if [[ "$BENCH_EXIT" -ne 0 ]]; then
+  exit "$BENCH_EXIT"
+fi
 
 echo "Wrote $OUT"
+
+# Stable alias: fixed path -> current timestamped artifact (absolute target so cwd-independent).
+if [[ "${TRACKA_SKIP_LATEST_SYMLINK:-0}" != "1" ]]; then
+  LATEST_REL="${TRACKA_LATEST_LINK:-results/trackA_full_paper_latest.json}"
+  if [[ "$LATEST_REL" != /* ]]; then
+    LATEST_ABS="$ROOT/$LATEST_REL"
+  else
+    LATEST_ABS="$LATEST_REL"
+  fi
+  OUT_DIR="$(cd "$(dirname "$OUT")" && pwd)"
+  ABS_OUT="$OUT_DIR/$(basename "$OUT")"
+  mkdir -p "$(dirname "$LATEST_ABS")"
+  ln -sf "$ABS_OUT" "$LATEST_ABS"
+  echo "Symlink $LATEST_ABS -> $ABS_OUT"
+fi
 
 # Validate JSON (echo vs real mix) and refresh paper LaTeX fragments unless disabled.
 RUN_VALIDATE_AND_EXPORT="${RUN_VALIDATE_AND_EXPORT:-1}"
