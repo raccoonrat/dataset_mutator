@@ -33,6 +33,10 @@ non-direct_upstream defenses (requires gateway GATEWAY_OUTPUT_GUARD_URL etc.; se
 Cost control: --max-harmful-prompts N and --max-benign-fpr-prompts M cap only harmful_rsr_suite and
 benign_fpr_suite line counts; recorded in manifest.
 
+Checkpoint / resume (when -o is set): after each seed finishes, state is written atomically to
+<output-stem>.checkpoint.json (override with --checkpoint). Use --resume to skip seeds already in
+that file; matrix_fingerprint must match (defenses, scenarios, prompt SHA256s, caps, etc.).
+
 Real LLM: gateway uses DEEPSEEK_API_KEY / GATEWAY_UPSTREAM_API_KEY / OPENAI_API_KEY + GATEWAY_UPSTREAM.
 For defense direct_upstream, the script adds the same Bearer to urllib requests to --upstream-url.
 Pass --openai-model deepseek-chat (or gpt-4o-mini) for the JSON body and manifest.
@@ -66,6 +70,74 @@ def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     h.update(path.read_bytes())
     return h.hexdigest()
+
+
+CHECKPOINT_VERSION = 1
+
+
+def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+    """Write whole file atomically (tmp + os.replace) to avoid truncated outputs on crash."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding=encoding)
+    os.replace(tmp, path)
+
+
+def atomic_write_json(path: Path, obj: Any) -> None:
+    atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def build_matrix_fingerprint(
+    *,
+    defenses: List[str],
+    scenarios: List[str],
+    seeds: List[int],
+    gateway_url: str,
+    upstream_url: str,
+    openai_model: str,
+    judge_mode: str,
+    judge_url: str,
+    smooth_k: int,
+    smooth_sigma: int,
+    gateway_output_guard: bool,
+    max_rounds: int,
+    f1_tau: float,
+    stress_workers: int,
+    stress_requests: int,
+    benign_probes: int,
+    max_harmful_prompts: Optional[int],
+    max_benign_fpr_prompts: Optional[int],
+    max_wild_prompts: Optional[int],
+    max_strongreject_prompts: Optional[int],
+    prompt_artifacts: Dict[str, Any],
+) -> str:
+    """Stable hash: if this differs, checkpoint resume is unsafe."""
+    payload = {
+        "defenses": defenses,
+        "scenarios": scenarios,
+        "seeds": seeds,
+        "gateway_url": gateway_url,
+        "upstream_url": upstream_url,
+        "openai_model": openai_model,
+        "judge_mode": judge_mode,
+        "judge_url": judge_url,
+        "smooth_k": smooth_k,
+        "smooth_sigma": smooth_sigma,
+        "gateway_output_guard": gateway_output_guard,
+        "max_rounds": max_rounds,
+        "f1_tau": f1_tau,
+        "stress_workers": stress_workers,
+        "stress_requests": stress_requests,
+        "benign_probes": benign_probes,
+        "max_harmful_prompts": max_harmful_prompts,
+        "max_benign_fpr_prompts": max_benign_fpr_prompts,
+        "max_wild_prompts": max_wild_prompts,
+        "max_strongreject_prompts": max_strongreject_prompts,
+        "prompt_artifacts": prompt_artifacts,
+    }
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def token_f1(pred: str, gold: str) -> float:
@@ -1460,6 +1532,21 @@ def main() -> None:
     )
     ap.add_argument("--output", "-o")
     ap.add_argument(
+        "--checkpoint",
+        default="",
+        help="resumable state JSON path; default: <output-stem>.checkpoint.json next to -o (only when -o set)",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="if checkpoint exists and matrix_fingerprint matches, skip seeds already present in checkpoint",
+    )
+    ap.add_argument(
+        "--no-checkpoint",
+        action="store_true",
+        help="disable per-seed checkpoint writes even when -o is set",
+    )
+    ap.add_argument(
         "--gateway-output-guard",
         action="store_true",
         help="send X-Gateway-Output-Guard: 1 on non-direct_upstream requests (enable gateway output-guard path)",
@@ -1533,8 +1620,82 @@ def main() -> None:
 
     seed_list = [int(x.strip()) for x in args.seeds.split(",") if x.strip()] if args.seeds.strip() else [args.seed]
 
+    judge_url = (args.judge_url or "").strip()
+    fp = build_matrix_fingerprint(
+        defenses=defenses,
+        scenarios=scenarios,
+        seeds=seed_list,
+        gateway_url=args.gateway_url,
+        upstream_url=args.upstream_url,
+        openai_model=args.openai_model,
+        judge_mode=judge_cfg.mode,
+        judge_url=judge_url,
+        smooth_k=smooth_cfg.samples_k,
+        smooth_sigma=smooth_cfg.sigma,
+        gateway_output_guard=bool(args.gateway_output_guard),
+        max_rounds=args.max_rounds,
+        f1_tau=args.f1_tau,
+        stress_workers=args.stress_workers,
+        stress_requests=args.stress_requests,
+        benign_probes=args.benign_probes,
+        max_harmful_prompts=args.max_harmful_prompts,
+        max_benign_fpr_prompts=args.max_benign_fpr_prompts,
+        max_wild_prompts=args.max_wild_prompts,
+        max_strongreject_prompts=args.max_strongreject_prompts,
+        prompt_artifacts=manifest["prompt_artifacts"],
+    )
+
+    out_path = Path(args.output) if args.output else None
+    use_ckpt = bool(out_path) and not args.no_checkpoint
+    ckpt_path: Optional[Path] = None
+    if use_ckpt and out_path is not None:
+        if args.checkpoint.strip():
+            ckpt_path = Path(args.checkpoint.strip())
+        else:
+            ckpt_path = out_path.with_name(out_path.stem + ".checkpoint.json")
+
     all_runs: List[Dict[str, Any]] = []
-    for sd in seed_list:
+    if use_ckpt and ckpt_path is not None and args.resume and ckpt_path.is_file():
+        raw_ck = json.loads(ckpt_path.read_text(encoding="utf-8"))
+        if int(raw_ck.get("checkpoint_version", 0)) != CHECKPOINT_VERSION:
+            print("checkpoint_version mismatch; remove --resume or delete checkpoint file", file=sys.stderr)
+            sys.exit(2)
+        if raw_ck.get("matrix_fingerprint") != fp:
+            print(
+                "matrix_fingerprint mismatch (config or data changed); refusing --resume. "
+                f"Delete {ckpt_path} or run without --resume.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        loaded_seeds = {int(r["seed"]) for r in raw_ck.get("runs", [])}
+        expected = set(seed_list)
+        if not loaded_seeds.issubset(expected):
+            print("checkpoint contains unknown seeds; refusing --resume", file=sys.stderr)
+            sys.exit(2)
+        all_runs = list(raw_ck.get("runs", []))
+        # Keep manifest from this run (prompt shas already verified via fingerprint)
+
+    done_seeds = {int(r["seed"]) for r in all_runs}
+    pending = [sd for sd in seed_list if sd not in done_seeds]
+    if pending and done_seeds:
+        print(f"resume: skipping seeds {sorted(done_seeds)}, running {pending}", file=sys.stderr)
+
+    def write_checkpoint() -> None:
+        if not use_ckpt or ckpt_path is None:
+            return
+        ck_doc: Dict[str, Any] = {
+            "checkpoint_version": CHECKPOINT_VERSION,
+            "matrix_fingerprint": fp,
+            "manifest": manifest,
+            "defenses": defenses,
+            "scenarios": scenarios,
+            "seeds_planned": seed_list,
+            "runs": all_runs,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        atomic_write_json(ckpt_path, ck_doc)
+
+    for sd in pending:
         rng = random.Random(sd)
         results = run_matrix(
             defenses,
@@ -1564,6 +1725,12 @@ def main() -> None:
             max_strongreject_prompts=args.max_strongreject_prompts,
         )
         all_runs.append({"seed": sd, "results": results})
+        # Order runs by seed_list for stable aggregates
+        order = {s: i for i, s in enumerate(seed_list)}
+        all_runs.sort(key=lambda r: order.get(int(r["seed"]), 999))
+        write_checkpoint()
+        if ckpt_path is not None:
+            print(f"checkpoint: seed {sd} saved -> {ckpt_path}", file=sys.stderr)
 
     doc: Dict[str, Any] = {
         "manifest": manifest,
@@ -1585,7 +1752,12 @@ def main() -> None:
 
     out = json.dumps(doc, ensure_ascii=False, indent=2)
     if args.output:
-        Path(args.output).write_text(out, encoding="utf-8")
+        atomic_write_text(Path(args.output), out, encoding="utf-8")
+        if use_ckpt and ckpt_path is not None and {int(r["seed"]) for r in all_runs} == set(seed_list):
+            try:
+                ckpt_path.unlink(missing_ok=True)
+            except OSError:
+                pass
     else:
         print(out)
 

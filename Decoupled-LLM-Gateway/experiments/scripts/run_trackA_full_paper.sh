@@ -15,7 +15,10 @@
 # Environment:
 #   GATEWAY_URL          default http://127.0.0.1:8080
 #   GATEWAY_UPSTREAM     default https://api.deepseek.com (must match the *running* gateway process)
-#   OUT                  default results/trackA_full_paper_seed3.json
+#   OUT                  default results/trackA_full_paper_paper_eval5_<YYYYMMDD_HHMMSS>.json (unique per run)
+#   RESUME               set to 1 to pass --resume; you MUST also set OUT to the *same* path as the interrupted run
+#                        (checkpoint lives at <OUT-stem>.checkpoint.json next to OUT)
+#   CHECKPOINT           optional explicit path for --checkpoint (default is next to OUT)
 #   OPENAI_MODEL         default deepseek-chat
 #   SKIP_PREFLIGHT       set to 1 to skip gateway probe (not recommended for real-paper runs)
 #   SKIP_FETCH_DATASETS  set to 1 to skip HuggingFace/network dataset fetch (use existing files)
@@ -34,7 +37,15 @@ source "$ROOT/experiments/scripts/paper_common.sh"
 paper_source_env_if_present
 GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:8080}"
 UP="${GATEWAY_UPSTREAM:-https://api.deepseek.com}"
-OUT="${OUT:-results/trackA_full_paper_seed3.json}"
+RUN_TS="$(date +%Y%m%d_%H%M%S)"
+if [[ "${RESUME:-0}" == "1" ]]; then
+  if [[ -z "${OUT:-}" ]]; then
+    echo "RESUME=1 requires OUT=results/....json pointing at the same file as the first run." >&2
+    exit 1
+  fi
+else
+  OUT="${OUT:-results/trackA_full_paper_paper_eval5_${RUN_TS}.json}"
+fi
 MODEL="${OPENAI_MODEL:-deepseek-chat}"
 SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
 
@@ -76,6 +87,14 @@ fi
 
 DEFS="unified,no_obfuscate,no_decoy,intent_only,direct_upstream,smooth_llm,structured_wrap,strong_system_guard,rag_semantic_only"
 
+CK_ARGS=()
+if [[ "${RESUME:-0}" == "1" ]]; then
+  CK_ARGS+=(--resume)
+fi
+if [[ -n "${CHECKPOINT:-}" ]]; then
+  CK_ARGS+=(--checkpoint "$CHECKPOINT")
+fi
+
 python3 experiments/run_paper_benchmark.py \
   --gateway-url "$GATEWAY_URL" \
   --upstream-url "$UP" \
@@ -92,6 +111,7 @@ python3 experiments/run_paper_benchmark.py \
   --seeds 42,43,44 \
   --judge-mode heuristic \
   --openai-model "$MODEL" \
+  "${CK_ARGS[@]}" \
   -o "$OUT"
 
 echo "Wrote $OUT"
