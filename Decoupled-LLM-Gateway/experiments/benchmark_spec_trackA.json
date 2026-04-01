@@ -108,5 +108,11 @@
     "Joint-key retrieval with activation vectors",
     "n>=5 distribution-based judge consensus with Clopper-Pearson gating"
   ],
-  "sota_comparison_note": "Primary tables: JBB-Behaviors misuse+benign for joint RSR and benign FPR; optional wild_rsr_suite and strongreject_rsr_suite; compare with AdvBench/GCG literature using same model ID and budgets."
+  "sota_comparison_note": "Primary tables: JBB-Behaviors misuse+benign for joint RSR and benign FPR; optional wild_rsr_suite and strongreject_rsr_suite; compare with AdvBench/GCG literature using same model ID and budgets.",
+  "external_sota_guard_baseline": {
+    "paper_ref": "BeyondModelReflection §5.4 baseline (6)",
+    "role": "Commodity frozen classifier (e.g. Llama Guard) vs gateway stack; not an X-Gateway-Experiment-Mode row",
+    "instantiation": "HTTP judge_service with JUDGE_BACKEND=chat_completion and JUDGE_CHAT_MODEL pointing at a served Llama-Guard (or equivalent); or gateway output guard with same backend; record model revision in manifest",
+    "openrouter_llama_guard_4": "scripts/run_openrouter_llama_guard4_judge.sh; JUDGE_LLAMA_GUARD_NATIVE=1; relabel stored completions via scripts/relabel_tracka_llama_guard.py after run_paper_benchmark.py --store-assistant-text"
+  }
 }

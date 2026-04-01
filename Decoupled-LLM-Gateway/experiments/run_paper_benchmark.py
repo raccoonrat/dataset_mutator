@@ -148,6 +148,10 @@ class ProgressTracker:
     last_status_code: Optional[int] = None
     last_latency_ms: Optional[float] = None
     last_error: str = ""
+    per_seed_calls_estimate: int = 0
+    seeds_planned: int = 0
+    seeds_completed: int = 0
+    run_status: str = "running"
 
     @contextmanager
     def scope(self, *, seed: Optional[int] = None, defense: str = "", scenario: str = ""):
@@ -179,7 +183,7 @@ class ProgressTracker:
         if not force and self.interval_s > 0 and (now - self.last_write_unix) < self.interval_s:
             return
         doc = {
-            "progress_version": 1,
+            "progress_version": 2,
             "updated_at_unix": now,
             "started_at_unix": self.started_at_unix,
             "elapsed_s": max(0.0, now - self.started_at_unix),
@@ -188,6 +192,10 @@ class ProgressTracker:
             "fraction_done_estimate": (
                 (self.calls_done / self.calls_total_estimate) if self.calls_total_estimate else None
             ),
+            "per_seed_calls_estimate": self.per_seed_calls_estimate,
+            "seeds_planned": self.seeds_planned,
+            "seeds_completed": self.seeds_completed,
+            "run_status": self.run_status,
             "seed": self.seed,
             "defense": self.defense,
             "scenario": self.scenario,
@@ -200,6 +208,22 @@ class ProgressTracker:
 
 
 _PROGRESS: Optional[ProgressTracker] = None
+
+# When True, per_prompt rows in RSR/FPR file suites include user_text + assistant_text for offline re-judging.
+_STORE_ASSISTANT_TEXT: bool = False
+_ASSISTANT_TEXT_CAP: int = 12000
+
+
+def _per_prompt_audit_dict(user_plain: str, assistant_text: str, sm: Dict[str, Any]) -> Dict[str, Any]:
+    if not _STORE_ASSISTANT_TEXT:
+        return {}
+    u = sm.get("user_message_sent")
+    if u is None or (isinstance(u, str) and not u.strip()):
+        ustr = str(user_plain)
+    else:
+        ustr = str(u)
+    c = max(1000, int(_ASSISTANT_TEXT_CAP))
+    return {"user_text": ustr[:c], "assistant_text": (assistant_text or "")[:c]}
 
 
 def build_matrix_fingerprint(
@@ -470,10 +494,12 @@ def smooth_majority_refusal(
         ref = response_is_refusal(u, text, judge_cfg)
         meta["smooth_refusal_votes"] = 1 if ref else 0
         meta["smooth_refusal_majority"] = ref
+        meta["user_message_sent"] = u
         return code, text, lat, meta
 
     votes: List[int] = []
     texts: List[str] = []
+    users: List[str] = []
     codes: List[int] = []
     lat_sum = 0.0
     for _ in range(k):
@@ -481,6 +507,7 @@ def smooth_majority_refusal(
         code, text, lat = complete_one(u)
         codes.append(code)
         texts.append(text)
+        users.append(u)
         lat_sum += lat
         votes.append(1 if response_is_refusal(u, text, judge_cfg) else 0)
     maj_ref = sum(votes) > k / 2
@@ -491,6 +518,7 @@ def smooth_majority_refusal(
             break
     meta["smooth_refusal_votes"] = sum(votes)
     meta["smooth_refusal_majority"] = maj_ref
+    meta["user_message_sent"] = users[pick]
     return codes[pick], texts[pick], lat_sum, meta
 
 
@@ -882,15 +910,15 @@ def _run_rsr_file_suite(
         is_ref = bool(sm["smooth_refusal_majority"])
         if is_ref:
             refused += 1
-        details.append(
-            {
-                "prompt_preview": line[:80],
-                "rsr": is_ref,
-                "status_code": code,
-                "latency_ms": lat,
-                "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
-            }
-        )
+        row = {
+            "prompt_preview": line[:80],
+            "rsr": is_ref,
+            "status_code": code,
+            "latency_ms": lat,
+            "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
+        }
+        row.update(_per_prompt_audit_dict(line, text, sm))
+        details.append(row)
 
     n = max(len(lines), 1)
     out_h: Dict[str, Any] = {
@@ -1070,15 +1098,15 @@ def run_hpm_proxy_suite(
         is_ref = bool(sm["smooth_refusal_majority"])
         if is_ref:
             refused += 1
-        details.append(
-            {
-                "prompt_preview": line[:80],
-                "rsr": is_ref,
-                "status_code": code,
-                "latency_ms": lat,
-                "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
-            }
-        )
+        row = {
+            "prompt_preview": line[:80],
+            "rsr": is_ref,
+            "status_code": code,
+            "latency_ms": lat,
+            "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
+        }
+        row.update(_per_prompt_audit_dict(line, text, sm))
+        details.append(row)
 
     n = max(len(lines), 1)
     return {
@@ -1143,14 +1171,14 @@ def run_benign_fpr_suite(
         refused = bool(sm["smooth_refusal_majority"])
         if refused:
             improper += 1
-        details.append(
-            {
-                "prompt_preview": line[:80],
-                "rsr_false_positive": refused,
-                "status_code": code,
-                "latency_ms": lat,
-            }
-        )
+        row = {
+            "prompt_preview": line[:80],
+            "rsr_false_positive": refused,
+            "status_code": code,
+            "latency_ms": lat,
+        }
+        row.update(_per_prompt_audit_dict(line, text, sm))
+        details.append(row)
 
     rate = improper / max(len(lines), 1)
     out_b: Dict[str, Any] = {
@@ -1211,6 +1239,10 @@ def run_decoy_dos_sla(
 ) -> Dict[str, Any]:
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
+
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = "decoy_dos_sla"
 
     with ThreadPoolExecutor(max_workers=max(1, stress_workers)) as ex:
         futs = [
@@ -1583,6 +1615,17 @@ def main() -> None:
     )
     ap.add_argument("--judge-timeout-s", type=float, default=90.0, help="HTTP judge timeout seconds")
     ap.add_argument(
+        "--store-assistant-text",
+        action="store_true",
+        help="embed user_text + assistant_text in per_prompt for harmful/wild/SR/benign FPR/HPM suites (larger JSON; enables offline relabel_tracka_llama_guard.py)",
+    )
+    ap.add_argument(
+        "--store-assistant-text-cap",
+        type=int,
+        default=12000,
+        help="max chars per stored user_text / assistant_text (default 12000)",
+    )
+    ap.add_argument(
         "--smooth-llm-samples",
         type=int,
         default=1,
@@ -1700,6 +1743,10 @@ def main() -> None:
     ap.add_argument("--self-check", action="store_true")
     args = ap.parse_args()
 
+    global _STORE_ASSISTANT_TEXT, _ASSISTANT_TEXT_CAP
+    _STORE_ASSISTANT_TEXT = bool(args.store_assistant_text)
+    _ASSISTANT_TEXT_CAP = max(1000, int(args.store_assistant_text_cap))
+
     if args.self_check:
         self_check()
         return
@@ -1762,6 +1809,17 @@ def main() -> None:
             "cra_session_json": str(cra_path) if cra_path else "",
             "cra_session_sha256": file_sha256(cra_path) if cra_path and cra_path.is_file() else "",
         },
+        "eval_judge_chat": {
+            "judge_backend": os.environ.get("JUDGE_BACKEND", "").strip(),
+            "judge_chat_base_url": os.environ.get("JUDGE_CHAT_BASE_URL", "").strip(),
+            "judge_chat_model": os.environ.get("JUDGE_CHAT_MODEL", "").strip(),
+            "judge_model_revision": (
+                os.environ.get("JUDGE_MODEL_REVISION", "").strip()
+                or os.environ.get("JUDGE_CHAT_MODEL", "").strip()
+            ),
+            "llama_guard_native": os.environ.get("JUDGE_LLAMA_GUARD_NATIVE", "").strip().lower()
+            in ("1", "true", "yes"),
+        },
     }
 
     seed_list = [int(x.strip()) for x in args.seeds.split(",") if x.strip()] if args.seeds.strip() else [args.seed]
@@ -1800,6 +1858,31 @@ def main() -> None:
         else:
             ckpt_path = out_path.with_name(out_path.stem + ".checkpoint.json")
 
+    benign_n = count_noncomment_lines(benign_path)
+    harmful_n = count_noncomment_lines(harmful_path)
+    hpm_n = count_noncomment_lines(hpm_path)
+    wild_n = min(
+        int(args.max_wild_prompts) if args.max_wild_prompts is not None else 10**9,
+        count_noncomment_lines(wild_path),
+    )
+    sr_n = min(
+        int(args.max_strongreject_prompts) if args.max_strongreject_prompts is not None else 10**9,
+        count_noncomment_lines(sr_path),
+    )
+    per_def = estimate_calls_per_defense(
+        scenarios=scenarios,
+        max_rounds=args.max_rounds,
+        benign_fpr_n=benign_n,
+        harmful_n=harmful_n,
+        hpm_n=hpm_n,
+        wild_n=wild_n,
+        strongreject_n=sr_n,
+        stress_requests=args.stress_requests,
+        benign_probes=args.benign_probes,
+    )
+    per_seed_calls_est = max(0, per_def * len(defenses))
+    est_total = max(0, per_seed_calls_est * len(seed_list))
+
     # Live progress (fine-grained, call-level). Independent of resume checkpoint.
     global _PROGRESS
     _PROGRESS = None
@@ -1810,28 +1893,10 @@ def main() -> None:
         else:
             prog_path = out_path.with_name(out_path.stem + ".progress.json")
     if prog_path is not None:
-        benign_n = count_noncomment_lines(benign_path)
-        harmful_n = count_noncomment_lines(harmful_path)
-        hpm_n = count_noncomment_lines(hpm_path)
-        wild_n = min(int(args.max_wild_prompts) if args.max_wild_prompts is not None else 10**9, count_noncomment_lines(wild_path))
-        sr_n = min(
-            int(args.max_strongreject_prompts) if args.max_strongreject_prompts is not None else 10**9,
-            count_noncomment_lines(sr_path),
-        )
-        per_def = estimate_calls_per_defense(
-            scenarios=scenarios,
-            max_rounds=args.max_rounds,
-            benign_fpr_n=benign_n,
-            harmful_n=harmful_n,
-            hpm_n=hpm_n,
-            wild_n=wild_n,
-            strongreject_n=sr_n,
-            stress_requests=args.stress_requests,
-            benign_probes=args.benign_probes,
-        )
-        est_total = max(0, per_def * len(defenses) * len(seed_list))
         _PROGRESS = ProgressTracker(path=prog_path, interval_s=max(0.0, float(args.progress_interval_sec)))
         _PROGRESS.calls_total_estimate = est_total
+        _PROGRESS.per_seed_calls_estimate = per_seed_calls_est
+        _PROGRESS.seeds_planned = len(seed_list)
         _PROGRESS.maybe_write(force=True)
 
     all_runs: List[Dict[str, Any]] = []
@@ -1859,6 +1924,12 @@ def main() -> None:
     pending = [sd for sd in seed_list if sd not in done_seeds]
     if pending and done_seeds:
         print(f"resume: skipping seeds {sorted(done_seeds)}, running {pending}", file=sys.stderr)
+
+    if _PROGRESS is not None:
+        _PROGRESS.seeds_completed = len(done_seeds)
+        if per_seed_calls_est and done_seeds:
+            _PROGRESS.calls_done = len(done_seeds) * per_seed_calls_est
+        _PROGRESS.maybe_write(force=True)
 
     def write_checkpoint() -> None:
         if not use_ckpt or ckpt_path is None:
@@ -1915,6 +1986,7 @@ def main() -> None:
         if ckpt_path is not None:
             print(f"checkpoint: seed {sd} saved -> {ckpt_path}", file=sys.stderr)
         if _PROGRESS is not None:
+            _PROGRESS.seeds_completed = len(all_runs)
             _PROGRESS.maybe_write(force=True)
 
     doc: Dict[str, Any] = {
@@ -1938,6 +2010,10 @@ def main() -> None:
     out = json.dumps(doc, ensure_ascii=False, indent=2)
     if args.output:
         atomic_write_text(Path(args.output), out, encoding="utf-8")
+        if _PROGRESS is not None and {int(r["seed"]) for r in all_runs} == set(seed_list):
+            _PROGRESS.run_status = "completed"
+            _PROGRESS.seeds_completed = len(all_runs)
+            _PROGRESS.maybe_write(force=True)
         if use_ckpt and ckpt_path is not None and {int(r["seed"]) for r in all_runs} == set(seed_list):
             try:
                 ckpt_path.unlink(missing_ok=True)

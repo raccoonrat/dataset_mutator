@@ -55,6 +55,33 @@ def per_seed_stats(all_runs: List[Dict[str, Any]], defense: str) -> Dict[str, Tu
     return out
 
 
+def per_seed_secondary_stats(
+    all_runs: List[Dict[str, Any]], defense: str, suffix: str
+) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    """Means over seeds for relabeled rates (relabel_tracka_llama_guard.py)."""
+
+    def ms(vals: List[float]) -> Tuple[Optional[float], Optional[float]]:
+        if not vals:
+            return None, None
+        if len(vals) == 1:
+            return vals[0], None
+        return statistics.mean(vals), statistics.stdev(vals)
+
+    sk = suffix.strip()
+    out: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    pairs = [
+        ("harm_sec", "harmful_rsr_suite", f"harmful_rsr_rate_{sk}"),
+        ("wild_sec", "wild_rsr_suite", f"wild_rsr_rate_{sk}"),
+        ("sr_sec", "strongreject_rsr_suite", f"strongreject_rsr_rate_{sk}"),
+        ("ben_sec", "benign_fpr_suite", f"improper_refusal_rate_{sk}"),
+        ("hpm_sec", "hpm_proxy", f"hpm_rsr_rate_{sk}"),
+    ]
+    for key, scen, rk in pairs:
+        raw = _collect(all_runs, defense, scen, rk)
+        out[key] = ms([float(x) for x in raw])
+    return out
+
+
 def fmt(x: Optional[float], digits: int = 3) -> str:
     if x is None:
         return "---"
@@ -69,7 +96,13 @@ def fmt_pm(m: Optional[float], s: Optional[float], digits: int = 3) -> str:
     return f"{m:.{digits}f} $\\pm$ {s:.{digits}f}"
 
 
-def emit_table(doc: Dict[str, Any], *, language: str, variant: str = "main") -> str:
+def emit_table(
+    doc: Dict[str, Any],
+    *,
+    language: str,
+    variant: str = "main",
+    secondary_suffix: str = "",
+) -> str:
     man = doc.get("manifest", {})
     defs: List[str] = doc.get("defenses", [])
     runs = doc.get("runs", [])
@@ -170,7 +203,93 @@ def emit_table(doc: Dict[str, Any], *, language: str, variant: str = "main") -> 
         lines.append(row)
 
     lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}"])
+
+    if secondary_suffix:
+        lines.append("")
+        lines.extend(
+            _emit_secondary_table(
+                doc,
+                language=language,
+                defs=defs,
+                runs=runs,
+                proto=str(proto),
+                model=str(model),
+                suffix=secondary_suffix.strip(),
+            )
+        )
+
     return "\n".join(lines) + "\n"
+
+
+def _emit_secondary_table(
+    doc: Dict[str, Any],
+    *,
+    language: str,
+    defs: List[str],
+    runs: List[Dict[str, Any]],
+    proto: str,
+    model: str,
+    suffix: str,
+) -> List[str]:
+    man = doc.get("manifest", {}) or {}
+    rel = man.get("secondary_judge_relabel") or {}
+    rev = str(rel.get("judge_model_revision") or man.get("eval_judge_chat", {}).get("judge_model_revision") or suffix)
+    lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\small",
+        r"\setlength{\tabcolsep}{3pt}",
+    ]
+    esc = proto.replace("_", r"\_")
+    rev_esc = rev.replace("_", r"\_")
+    if language == "en":
+        cap = (
+            r"\caption{\textbf{Track~A secondary judge (re-labeled completions)} "
+            r"(protocol \texttt{" + esc + r"}; stored \texttt{user\_text}/\texttt{assistant\_text}; "
+            r"judge suffix \texttt{" + suffix.replace("_", r"\_") + r"}; revision \texttt{" + rev_esc + r"}). "
+            r"Same gateway completions as the primary Track~A table; rates recomputed via HTTP judge only.}"
+        )
+        lbl = r"\label{tab:tracka-secondary-" + suffix.replace("_", "") + "}"
+        hdr = (
+            r"\begin{tabular}{@{}lccccc@{}}"
+            r"\toprule"
+            r"\textbf{Defense} & \textbf{Harm.\ RSR} & \textbf{Wild RSR} & \textbf{SR RSR} & "
+            r"\textbf{Ben.\ FPR} & \textbf{HPM RSR} \\"
+            r"\midrule"
+        )
+    else:
+        cap = (
+            r"\caption{\textbf{Track~A 二次裁判（对存盘 completion 重标）}"
+            r"（协议 \texttt{" + esc + r"}；依赖 \texttt{user\_text}/\texttt{assistant\_text}；"
+            r"后缀 \texttt{" + suffix.replace("_", r"\_") + r"}；revision \texttt{" + rev_esc + r"}）。"
+            r"与主表~\protect\ref{tab:tracka-main-cn} 为同一批网关完成体，仅经 HTTP 裁判重算比例。}"
+        )
+        lbl = r"\label{tab:tracka-secondary-cn-" + suffix.replace("_", "") + "}"
+        hdr = (
+            r"\begin{tabular}{@{}lccccc@{}}"
+            r"\toprule"
+            r"\textbf{防御} & \textbf{有害RSR} & \textbf{Wild RSR} & \textbf{SR RSR} & "
+            r"\textbf{良性FPR} & \textbf{HPM RSR} \\"
+            r"\midrule"
+        )
+    lines.extend(
+        [
+            f"% secondary judge table model={model} suffix={suffix}",
+            cap,
+            lbl,
+            hdr,
+        ]
+    )
+    for d in defs:
+        st = per_seed_secondary_stats(runs, d, suffix)
+        row = (
+            f"\\texttt{{{d.replace('_', r'\_')}}} "
+            f"& {fmt_pm(*st['harm_sec'])} & {fmt_pm(*st['wild_sec'])} & {fmt_pm(*st['sr_sec'])} "
+            f"& {fmt_pm(*st['ben_sec'])} & {fmt_pm(*st['hpm_sec'])} \\\\"
+        )
+        lines.append(row)
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}"])
+    return lines
 
 
 def main() -> None:
@@ -184,14 +303,31 @@ def main() -> None:
         default="main",
         help="main: Table tab:tracka-main; guard: output-guard ablation captions/labels",
     )
+    ap.add_argument(
+        "--secondary-suffix",
+        default="",
+        help="if set (e.g. llama_guard4), append appendix table for relabeled rates from relabel_tracka_llama_guard.py",
+    )
     args = ap.parse_args()
     doc = json.loads(Path(args.json).read_text(encoding="utf-8"))
     Path(args.out_en).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out_en).write_text(emit_table(doc, language="en", variant=args.variant), encoding="utf-8")
+    Path(args.out_en).write_text(
+        emit_table(doc, language="en", variant=args.variant, secondary_suffix=args.secondary_suffix),
+        encoding="utf-8",
+    )
     if args.out_cn:
         Path(args.out_cn).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_cn).write_text(emit_table(doc, language="cn", variant=args.variant), encoding="utf-8")
-    print("wrote", args.out_en, args.out_cn or "(no cn)", f"variant={args.variant}")
+        Path(args.out_cn).write_text(
+            emit_table(doc, language="cn", variant=args.variant, secondary_suffix=args.secondary_suffix),
+            encoding="utf-8",
+        )
+    print(
+        "wrote",
+        args.out_en,
+        args.out_cn or "(no cn)",
+        f"variant={args.variant}",
+        f"secondary_suffix={args.secondary_suffix or '(none)'}",
+    )
 
 
 if __name__ == "__main__":

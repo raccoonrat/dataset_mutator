@@ -28,6 +28,11 @@
 #   SKIP_CONDA_ACTIVATE  set to 1 to skip auto conda activate dataset_mutator
 #   TRACKA_PROGRESS_INTERVAL_SEC  seconds between [trackA] progress lines (default 300); 0 disables periodic logs
 #
+# Refusal judge (主表 LG4 / HTTP): 默认 --judge-mode http，需先启动 judge（见 scripts/run_openrouter_llama_guard4_judge.sh）。
+#   PAPER_EVAL_JUDGE_URL  默认 http://127.0.0.1:${JUDGE_PORT:-8765}/judge
+#   TRACKA_JUDGE_MODE     设为 heuristic 可恢复纯关键词裁判（不写 manifest LG4）
+#   跑分前在**同一 shell** export JUDGE_* / JUDGE_MODEL_REVISION，manifest.eval_judge_chat 会记录 revision
+#
 # Local secrets / upstream (optional): place a file ./env in this repo root and run
 #   cd Decoupled-LLM-Gateway && . ./env && ./experiments/scripts/run_trackA_full_paper.sh
 # This script auto-sources ./env when present (exports all variables defined there).
@@ -159,7 +164,17 @@ paper_core_progress_line() {
   printf '\n'
 }
 
-echo "[trackA] $(date -Is) benchmark_main_start out=$OUT"
+JUDGE_PORT="${JUDGE_PORT:-8765}"
+TRACKA_JUDGE_MODE="${TRACKA_JUDGE_MODE:-http}"
+PAPER_EVAL_JUDGE_URL="${PAPER_EVAL_JUDGE_URL:-http://127.0.0.1:${JUDGE_PORT}/judge}"
+export PAPER_EVAL_JUDGE_URL
+
+JUDGE_ARGS=(--judge-mode "$TRACKA_JUDGE_MODE")
+if [[ "${TRACKA_JUDGE_MODE}" == "http" ]]; then
+  JUDGE_ARGS+=(--judge-url "$PAPER_EVAL_JUDGE_URL")
+fi
+
+echo "[trackA] $(date -Is) benchmark_main_start out=$OUT judge_mode=${TRACKA_JUDGE_MODE} judge_url=${PAPER_EVAL_JUDGE_URL:-}"
 BENCH_START=$(date +%s)
 python3 experiments/run_paper_benchmark.py \
   --gateway-url "$GATEWAY_URL" \
@@ -175,7 +190,7 @@ python3 experiments/run_paper_benchmark.py \
   --max-wild-prompts "${MAX_WILD_PROMPTS:-200}" \
   --max-strongreject-prompts "${MAX_STRONGREJECT_PROMPTS:-100}" \
   --seeds 42,43,44 \
-  --judge-mode heuristic \
+  "${JUDGE_ARGS[@]}" \
   --openai-model "$MODEL" \
   "${CK_ARGS[@]}" \
   -o "$OUT" &
