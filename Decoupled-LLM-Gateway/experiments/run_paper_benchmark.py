@@ -33,9 +33,10 @@ non-direct_upstream defenses (requires gateway GATEWAY_OUTPUT_GUARD_URL etc.; se
 Cost control: --max-harmful-prompts N and --max-benign-fpr-prompts M cap only harmful_rsr_suite and
 benign_fpr_suite line counts; recorded in manifest.
 
-Checkpoint / resume (when -o is set): after each seed finishes, state is written atomically to
-<output-stem>.checkpoint.json (override with --checkpoint). Use --resume to skip seeds already in
-that file; matrix_fingerprint must match (defenses, scenarios, prompt SHA256s, caps, etc.).
+Checkpoint / resume (when -o is set): state is written atomically to
+<output-stem>.checkpoint.json (override with --checkpoint). After each **defense** within a seed,
+progress is flushed (v2); use --resume to continue mid-matrix or skip finished seeds.
+matrix_fingerprint must match (defenses, scenarios, prompt SHA256s, caps, prompt_workers, etc.).
 
 Real LLM: gateway uses DEEPSEEK_API_KEY / GATEWAY_UPSTREAM_API_KEY / OPENAI_API_KEY + GATEWAY_UPSTREAM.
 For defense direct_upstream, the script adds the same Bearer to urllib requests to --upstream-url.
@@ -52,6 +53,7 @@ import random
 import re
 import statistics
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -73,7 +75,26 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 2
+
+# HTTP judge: optional connection reuse (requests.Session per thread).
+_judge_http_tls = threading.local()
+
+
+def run_entry_is_complete(entry: Dict[str, Any], n_defenses: int) -> bool:
+    """v2 partial runs carry _checkpoint.next_defense_index; legacy entries have no _checkpoint."""
+    ck = entry.get("_checkpoint")
+    if ck is None:
+        return True
+    return int(ck.get("next_defense_index", 0)) >= n_defenses
+
+
+def runs_for_public_json(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Strip resume-only keys from final benchmark JSON."""
+    out: List[Dict[str, Any]] = []
+    for r in runs:
+        out.append({k: v for k, v in r.items() if k != "_checkpoint"})
+    return out
 
 
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
@@ -249,6 +270,7 @@ def build_matrix_fingerprint(
     max_wild_prompts: Optional[int],
     max_strongreject_prompts: Optional[int],
     prompt_artifacts: Dict[str, Any],
+    prompt_workers: int,
 ) -> str:
     """Stable hash: if this differs, checkpoint resume is unsafe."""
     payload = {
@@ -273,6 +295,7 @@ def build_matrix_fingerprint(
         "max_wild_prompts": max_wild_prompts,
         "max_strongreject_prompts": max_strongreject_prompts,
         "prompt_artifacts": prompt_artifacts,
+        "prompt_workers": prompt_workers,
     }
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -341,15 +364,44 @@ def http_judge_refusal(user_prompt: str, assistant_text: str, url: str, timeout_
         },
         ensure_ascii=False,
     ).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    bearer = (os.environ.get("PAPER_EVAL_JUDGE_BEARER") or "").strip()
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    use_sess = (os.environ.get("PAPER_EVAL_JUDGE_NO_SESSION") or "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    )
+    if use_sess:
+        try:
+            import requests
+        except ImportError:
+            requests = None  # type: ignore[assignment]
+        if requests is not None:
+            sess = getattr(_judge_http_tls, "sess", None)
+            if sess is None:
+                _judge_http_tls.sess = requests.Session()
+                sess = _judge_http_tls.sess
+            try:
+                r = sess.post(url, data=payload, headers=headers, timeout=timeout_s)
+            except requests.RequestException as e:
+                raise ValueError(f"judge HTTP request failed: {e}") from e
+            if r.status_code >= 400:
+                raise ValueError(f"judge HTTP {r.status_code}: {r.text[:500]}")
+            body = r.json()
+            if isinstance(body, dict):
+                if "is_refusal" in body:
+                    return bool(body["is_refusal"])
+                if "refusal" in body:
+                    return bool(body["refusal"])
+            raise ValueError(f"judge HTTP: expected JSON with is_refusal or refusal, got {type(body).__name__}")
     req = urllib.request.Request(
         url,
         data=payload,
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
-    bearer = (os.environ.get("PAPER_EVAL_JUDGE_BEARER") or "").strip()
-    if bearer:
-        req.add_header("Authorization", f"Bearer {bearer}")
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", errors="replace"))
@@ -875,6 +927,8 @@ def _run_rsr_file_suite(
     max_prompts: Optional[int] = None,
     notes: str = "",
     source_tag: str = "",
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     """RSR over a plain-line prompt file (harmful goals, wild jailbreaks, StrongREJECT, etc.)."""
     if _PROGRESS is not None:
@@ -889,7 +943,9 @@ def _run_rsr_file_suite(
     details: List[Dict[str, Any]] = []
     latencies: List[float] = []
 
-    for line in lines:
+    pw = max(1, int(prompt_workers))
+
+    def one_line(i: int, line: str, line_rng: random.Random) -> Dict[str, Any]:
         user_plain = line
 
         def complete_one(u: str) -> Tuple[int, str, float]:
@@ -904,12 +960,9 @@ def _run_rsr_file_suite(
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
         code, text, lat, sm = smooth_majority_refusal(
-            defense, user_plain, rng, smooth, judge_cfg, complete_one
+            defense, user_plain, line_rng, smooth, judge_cfg, complete_one
         )
-        latencies.append(lat)
         is_ref = bool(sm["smooth_refusal_majority"])
-        if is_ref:
-            refused += 1
         row = {
             "prompt_preview": line[:80],
             "rsr": is_ref,
@@ -918,7 +971,33 @@ def _run_rsr_file_suite(
             "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
         }
         row.update(_per_prompt_audit_dict(line, text, sm))
-        details.append(row)
+        return row
+
+    if pw <= 1:
+        for line in lines:
+            row = one_line(len(details), line, rng)
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr"]:
+                refused += 1
+            details.append(row)
+    else:
+        def task(it: Tuple[int, str]) -> Tuple[int, Dict[str, Any]]:
+            i, line = it
+            line_rng = random.Random((suite_parallel_seed * 1_000_003 + i * 4_993) & 0x7FFFFFFF)
+            return i, one_line(i, line, line_rng)
+
+        tmp: Dict[int, Dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=pw) as ex:
+            futs = [ex.submit(task, (i, ln)) for i, ln in enumerate(lines)]
+            for fut in as_completed(futs):
+                i, row = fut.result()
+                tmp[i] = row
+        for i in range(len(lines)):
+            row = tmp[i]
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr"]:
+                refused += 1
+            details.append(row)
 
     n = max(len(lines), 1)
     out_h: Dict[str, Any] = {
@@ -958,6 +1037,8 @@ def run_harmful_rsr_suite(
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
     max_prompts: Optional[int] = None,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     """RSR on harmful single-turn goals (JBB-Behaviors misuse preferred; AdvBench-compatible)."""
     o = _run_rsr_file_suite(
@@ -977,6 +1058,8 @@ def run_harmful_rsr_suite(
         max_prompts=max_prompts,
         notes="§5 attack (7): RSR on harmful behavior goals; use fetch_jbb_behaviors.py for JBB-Behaviors misuse list.",
         source_tag="harmful_goals",
+        prompt_workers=prompt_workers,
+        suite_parallel_seed=suite_parallel_seed,
     )
     if max_prompts is not None:
         o["harmful_prompts_cap"] = max_prompts
@@ -996,6 +1079,8 @@ def run_wild_rsr_suite(
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
     max_prompts: Optional[int] = None,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     """RSR on in-the-wild jailbreak prompt distribution (Track A black-box realism)."""
     return _run_rsr_file_suite(
@@ -1015,6 +1100,8 @@ def run_wild_rsr_suite(
         max_prompts=max_prompts,
         notes="§5 attack (8): in-the-wild prompts (verazuo/jailbreak_llms-style); stress real-world drift.",
         source_tag="in_the_wild",
+        prompt_workers=prompt_workers,
+        suite_parallel_seed=suite_parallel_seed,
     )
 
 
@@ -1031,6 +1118,8 @@ def run_strongreject_rsr_suite(
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
     max_prompts: Optional[int] = None,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     """RSR on StrongREJECT forbidden_prompt list; use HTTP judge for empty-jailbreak-aware ASR/RSR if needed."""
     return _run_rsr_file_suite(
@@ -1050,6 +1139,8 @@ def run_strongreject_rsr_suite(
         max_prompts=max_prompts,
         notes="StrongREJECT benchmark prompts; pair with StrongREJECT evaluator / rubric for empty-jailbreak control.",
         source_tag="strongreject",
+        prompt_workers=prompt_workers,
+        suite_parallel_seed=suite_parallel_seed,
     )
 
 
@@ -1065,6 +1156,8 @@ def run_hpm_proxy_suite(
     judge_cfg: JudgeConfig,
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     """Track A proxy for §5 axis (ii): refusal under social-pressure framing (not full HPM dataset)."""
     if _PROGRESS is not None:
@@ -1076,8 +1169,9 @@ def run_hpm_proxy_suite(
     refused = 0
     details: List[Dict[str, Any]] = []
     latencies: List[float] = []
+    pw = max(1, int(prompt_workers))
 
-    for line in lines:
+    def one_line(i: int, line: str, line_rng: random.Random) -> Dict[str, Any]:
         user_plain = line
 
         def complete_one(u: str) -> Tuple[int, str, float]:
@@ -1092,12 +1186,9 @@ def run_hpm_proxy_suite(
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
         code, text, lat, sm = smooth_majority_refusal(
-            defense, user_plain, rng, smooth, judge_cfg, complete_one
+            defense, user_plain, line_rng, smooth, judge_cfg, complete_one
         )
-        latencies.append(lat)
         is_ref = bool(sm["smooth_refusal_majority"])
-        if is_ref:
-            refused += 1
         row = {
             "prompt_preview": line[:80],
             "rsr": is_ref,
@@ -1106,7 +1197,33 @@ def run_hpm_proxy_suite(
             "smooth_refusal_votes": sm.get("smooth_refusal_votes"),
         }
         row.update(_per_prompt_audit_dict(line, text, sm))
-        details.append(row)
+        return row
+
+    if pw <= 1:
+        for line in lines:
+            row = one_line(len(details), line, rng)
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr"]:
+                refused += 1
+            details.append(row)
+    else:
+        def task(it: Tuple[int, str]) -> Tuple[int, Dict[str, Any]]:
+            i, line = it
+            line_rng = random.Random((suite_parallel_seed * 1_000_003 + i * 4_993) & 0x7FFFFFFF)
+            return i, one_line(i, line, line_rng)
+
+        tmp: Dict[int, Dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=pw) as ex:
+            futs = [ex.submit(task, (i, ln)) for i, ln in enumerate(lines)]
+            for fut in as_completed(futs):
+                i, row = fut.result()
+                tmp[i] = row
+        for i in range(len(lines)):
+            row = tmp[i]
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr"]:
+                refused += 1
+            details.append(row)
 
     n = max(len(lines), 1)
     return {
@@ -1137,6 +1254,8 @@ def run_benign_fpr_suite(
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
     max_prompts: Optional[int] = None,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> Dict[str, Any]:
     if _PROGRESS is not None:
         _PROGRESS.defense = defense
@@ -1149,8 +1268,9 @@ def run_benign_fpr_suite(
     improper = 0
     details: List[Dict[str, Any]] = []
     latencies: List[float] = []
+    pw = max(1, int(prompt_workers))
 
-    for line in lines:
+    def one_line(i: int, line: str, line_rng: random.Random) -> Dict[str, Any]:
         user_plain = line
 
         def complete_one(u: str) -> Tuple[int, str, float]:
@@ -1165,12 +1285,9 @@ def run_benign_fpr_suite(
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
         code, text, lat, sm = smooth_majority_refusal(
-            defense, user_plain, rng, smooth, judge_cfg, complete_one
+            defense, user_plain, line_rng, smooth, judge_cfg, complete_one
         )
-        latencies.append(lat)
         refused = bool(sm["smooth_refusal_majority"])
-        if refused:
-            improper += 1
         row = {
             "prompt_preview": line[:80],
             "rsr_false_positive": refused,
@@ -1178,7 +1295,33 @@ def run_benign_fpr_suite(
             "latency_ms": lat,
         }
         row.update(_per_prompt_audit_dict(line, text, sm))
-        details.append(row)
+        return row
+
+    if pw <= 1:
+        for line in lines:
+            row = one_line(len(details), line, rng)
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr_false_positive"]:
+                improper += 1
+            details.append(row)
+    else:
+        def task(it: Tuple[int, str]) -> Tuple[int, Dict[str, Any]]:
+            i, line = it
+            line_rng = random.Random((suite_parallel_seed * 1_000_003 + i * 4_993) & 0x7FFFFFFF)
+            return i, one_line(i, line, line_rng)
+
+        tmp: Dict[int, Dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=pw) as ex:
+            futs = [ex.submit(task, (i, ln)) for i, ln in enumerate(lines)]
+            for fut in as_completed(futs):
+                i, row = fut.result()
+                tmp[i] = row
+        for i in range(len(lines)):
+            row = tmp[i]
+            latencies.append(float(row["latency_ms"]))
+            if row["rsr_false_positive"]:
+                improper += 1
+            details.append(row)
 
     rate = improper / max(len(lines), 1)
     out_b: Dict[str, Any] = {
@@ -1318,8 +1461,13 @@ def run_matrix(
     max_benign_fpr_prompts: Optional[int] = None,
     max_wild_prompts: Optional[int] = None,
     max_strongreject_prompts: Optional[int] = None,
+    after_defense_callback: Optional[Callable[[List[Dict[str, Any]], int], None]] = None,
+    resume_from_defense: int = 0,
+    initial_results: Optional[List[Dict[str, Any]]] = None,
+    prompt_workers: int = 1,
+    suite_parallel_seed: int = 0,
 ) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+    out: List[Dict[str, Any]] = initial_results if initial_results is not None else []
     multi = "multi_round_extraction" in scenarios
     fpr = "benign_fpr_suite" in scenarios
     hpm = "hpm_proxy" in scenarios
@@ -1350,7 +1498,8 @@ def run_matrix(
         )
     ]
 
-    for d in defenses:
+    for di in range(max(0, resume_from_defense), len(defenses)):
+        d = defenses[di]
         for s in single:
             try:
                 r = run_scenario(
@@ -1402,6 +1551,8 @@ def run_matrix(
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
                         max_prompts=max_benign_fpr_prompts,
+                        prompt_workers=prompt_workers,
+                        suite_parallel_seed=suite_parallel_seed,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1420,6 +1571,8 @@ def run_matrix(
                         judge_cfg=judge_cfg,
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
+                        prompt_workers=prompt_workers,
+                        suite_parallel_seed=suite_parallel_seed,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1439,6 +1592,8 @@ def run_matrix(
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
                         max_prompts=max_harmful_prompts,
+                        prompt_workers=prompt_workers,
+                        suite_parallel_seed=suite_parallel_seed,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1458,6 +1613,8 @@ def run_matrix(
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
                         max_prompts=max_wild_prompts,
+                        prompt_workers=prompt_workers,
+                        suite_parallel_seed=suite_parallel_seed,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1477,6 +1634,8 @@ def run_matrix(
                         smooth=smooth_cfg,
                         gateway_output_guard=gateway_output_guard,
                         max_prompts=max_strongreject_prompts,
+                        prompt_workers=prompt_workers,
+                        suite_parallel_seed=suite_parallel_seed,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -1501,6 +1660,8 @@ def run_matrix(
                 )
             except Exception as e:  # noqa: BLE001
                 out.append({"scenario_id": "decoy_dos_sla", "defense_baseline": d, "error": str(e)})
+        if after_defense_callback is not None:
+            after_defense_callback(out, di + 1)
     return out
 
 
@@ -1704,6 +1865,13 @@ def main() -> None:
     ap.add_argument("--stress-requests", type=int, default=32)
     ap.add_argument("--benign-probes", type=int, default=12)
     ap.add_argument(
+        "--prompt-workers",
+        type=int,
+        default=1,
+        help="thread pool size for line-based suites (harmful/wild/StrongREJECT RSR, benign FPR, HPM); "
+        ">1 overlaps gateway+judge I/O; uses deterministic per-line RNG so SmoothLLM jitter may differ from workers=1",
+    )
+    ap.add_argument(
         "--openai-model",
         default="eval",
         help="model field in API body + manifest (use real model id when upstream is a real LLM)",
@@ -1728,7 +1896,7 @@ def main() -> None:
     ap.add_argument(
         "--resume",
         action="store_true",
-        help="if checkpoint exists and matrix_fingerprint matches, skip seeds already present in checkpoint",
+        help="if checkpoint exists and matrix_fingerprint matches, skip completed seeds and resume mid-matrix (per-defense checkpoints)",
     )
     ap.add_argument(
         "--no-checkpoint",
@@ -1785,6 +1953,7 @@ def main() -> None:
         "upstream_url": args.upstream_url,
         "openai_model_field": args.openai_model,
         "judge_mode": judge_cfg.mode,
+        "prompt_workers": max(1, int(args.prompt_workers)),
         "smooth_llm_samples_k": smooth_cfg.samples_k,
         "smooth_llm_sigma": smooth_cfg.sigma,
         "gateway_output_guard_header": bool(args.gateway_output_guard),
@@ -1847,6 +2016,7 @@ def main() -> None:
         max_wild_prompts=args.max_wild_prompts,
         max_strongreject_prompts=args.max_strongreject_prompts,
         prompt_artifacts=manifest["prompt_artifacts"],
+        prompt_workers=max(1, int(args.prompt_workers)),
     )
 
     out_path = Path(args.output) if args.output else None
@@ -1902,7 +2072,8 @@ def main() -> None:
     all_runs: List[Dict[str, Any]] = []
     if use_ckpt and ckpt_path is not None and args.resume and ckpt_path.is_file():
         raw_ck = json.loads(ckpt_path.read_text(encoding="utf-8"))
-        if int(raw_ck.get("checkpoint_version", 0)) != CHECKPOINT_VERSION:
+        ck_ver = int(raw_ck.get("checkpoint_version", 0))
+        if ck_ver not in (1, 2):
             print("checkpoint_version mismatch; remove --resume or delete checkpoint file", file=sys.stderr)
             sys.exit(2)
         if raw_ck.get("matrix_fingerprint") != fp:
@@ -1920,10 +2091,14 @@ def main() -> None:
         all_runs = list(raw_ck.get("runs", []))
         # Keep manifest from this run (prompt shas already verified via fingerprint)
 
-    done_seeds = {int(r["seed"]) for r in all_runs}
+    n_defenses = len(defenses)
+    done_seeds = {int(r["seed"]) for r in all_runs if run_entry_is_complete(r, n_defenses)}
     pending = [sd for sd in seed_list if sd not in done_seeds]
+    partial_seeds = [int(r["seed"]) for r in all_runs if not run_entry_is_complete(r, n_defenses)]
     if pending and done_seeds:
-        print(f"resume: skipping seeds {sorted(done_seeds)}, running {pending}", file=sys.stderr)
+        print(f"resume: completed seeds {sorted(done_seeds)}, pending {pending}", file=sys.stderr)
+    if partial_seeds:
+        print(f"resume: mid-matrix seeds (per-defense checkpoint) {sorted(partial_seeds)}", file=sys.stderr)
 
     if _PROGRESS is not None:
         _PROGRESS.seeds_completed = len(done_seeds)
@@ -1946,11 +2121,38 @@ def main() -> None:
         }
         atomic_write_json(ckpt_path, ck_doc)
 
+    pw = max(1, int(args.prompt_workers))
+
     for sd in pending:
         rng = random.Random(sd)
         if _PROGRESS is not None:
             _PROGRESS.seed = sd
             _PROGRESS.maybe_write(force=True)
+
+        run_entry: Optional[Dict[str, Any]] = None
+        for r in all_runs:
+            if int(r["seed"]) == sd:
+                run_entry = r
+                break
+        if run_entry is None:
+            run_entry = {"seed": sd, "results": []}
+            all_runs.append(run_entry)
+
+        resume_from = int((run_entry.get("_checkpoint") or {}).get("next_defense_index") or 0)
+
+        def after_defense(out_list: List[Dict[str, Any]], next_idx: int) -> None:
+            run_entry["results"] = out_list
+            if next_idx < n_defenses:
+                run_entry["_checkpoint"] = {"next_defense_index": next_idx}
+            else:
+                run_entry.pop("_checkpoint", None)
+            write_checkpoint()
+            if ckpt_path is not None:
+                print(
+                    f"checkpoint: seed={sd} next_defense_index={next_idx}/{n_defenses} -> {ckpt_path}",
+                    file=sys.stderr,
+                )
+
         results = run_matrix(
             defenses,
             scenarios,
@@ -1977,26 +2179,34 @@ def main() -> None:
             max_benign_fpr_prompts=args.max_benign_fpr_prompts,
             max_wild_prompts=args.max_wild_prompts,
             max_strongreject_prompts=args.max_strongreject_prompts,
+            after_defense_callback=after_defense if use_ckpt else None,
+            resume_from_defense=resume_from,
+            initial_results=run_entry["results"],
+            prompt_workers=pw,
+            suite_parallel_seed=sd,
         )
-        all_runs.append({"seed": sd, "results": results})
-        # Order runs by seed_list for stable aggregates
+        run_entry["results"] = results
+        run_entry.pop("_checkpoint", None)
         order = {s: i for i, s in enumerate(seed_list)}
         all_runs.sort(key=lambda r: order.get(int(r["seed"]), 999))
         write_checkpoint()
-        if ckpt_path is not None:
-            print(f"checkpoint: seed {sd} saved -> {ckpt_path}", file=sys.stderr)
+        if ckpt_path is not None and use_ckpt:
+            print(f"checkpoint: seed {sd} full matrix saved -> {ckpt_path}", file=sys.stderr)
         if _PROGRESS is not None:
-            _PROGRESS.seeds_completed = len(all_runs)
+            _PROGRESS.seeds_completed = sum(
+                1 for r in all_runs if run_entry_is_complete(r, n_defenses)
+            )
             _PROGRESS.maybe_write(force=True)
 
+    runs_public = runs_for_public_json(all_runs)
     doc: Dict[str, Any] = {
         "manifest": manifest,
         "defenses": defenses,
         "scenarios": scenarios,
-        "runs": all_runs,
+        "runs": runs_public,
     }
 
-    doc["aggregate_by_defense"] = aggregate_multi_seed_metrics(all_runs, defenses)
+    doc["aggregate_by_defense"] = aggregate_multi_seed_metrics(runs_public, defenses)
     # backward-compatible alias (single- or multi-seed)
     doc["aggregate_extraction_f1"] = {
         d: {
@@ -2010,11 +2220,14 @@ def main() -> None:
     out = json.dumps(doc, ensure_ascii=False, indent=2)
     if args.output:
         atomic_write_text(Path(args.output), out, encoding="utf-8")
-        if _PROGRESS is not None and {int(r["seed"]) for r in all_runs} == set(seed_list):
+        all_complete = {int(r["seed"]) for r in all_runs} == set(seed_list) and all(
+            run_entry_is_complete(r, n_defenses) for r in all_runs
+        )
+        if _PROGRESS is not None and all_complete:
             _PROGRESS.run_status = "completed"
-            _PROGRESS.seeds_completed = len(all_runs)
+            _PROGRESS.seeds_completed = len(seed_list)
             _PROGRESS.maybe_write(force=True)
-        if use_ckpt and ckpt_path is not None and {int(r["seed"]) for r in all_runs} == set(seed_list):
+        if use_ckpt and ckpt_path is not None and all_complete:
             try:
                 ckpt_path.unlink(missing_ok=True)
             except OSError:

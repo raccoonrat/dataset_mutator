@@ -32,6 +32,7 @@
 #   PAPER_EVAL_JUDGE_URL  默认 http://127.0.0.1:${JUDGE_PORT:-8765}/judge
 #   TRACKA_JUDGE_MODE     设为 heuristic 可恢复纯关键词裁判（不写 manifest LG4）
 #   跑分前在**同一 shell** export JUDGE_* / JUDGE_MODEL_REVISION，manifest.eval_judge_chat 会记录 revision
+#   TRACKA_PROMPT_WORKERS  行级 RSR/FPR/HPM 并发（默认 4）；设为 1 可恢复严格顺序 RNG（SmoothLLM 抖动与旧版一致）
 #
 # Local secrets / upstream (optional): place a file ./env in this repo root and run
 #   cd Decoupled-LLM-Gateway && . ./env && ./experiments/scripts/run_trackA_full_paper.sh
@@ -174,7 +175,8 @@ if [[ "${TRACKA_JUDGE_MODE}" == "http" ]]; then
   JUDGE_ARGS+=(--judge-url "$PAPER_EVAL_JUDGE_URL")
 fi
 
-echo "[trackA] $(date -Is) benchmark_main_start out=$OUT judge_mode=${TRACKA_JUDGE_MODE} judge_url=${PAPER_EVAL_JUDGE_URL:-}"
+TRACKA_PROMPT_WORKERS="${TRACKA_PROMPT_WORKERS:-4}"
+echo "[trackA] $(date -Is) benchmark_main_start out=$OUT judge_mode=${TRACKA_JUDGE_MODE} judge_url=${PAPER_EVAL_JUDGE_URL:-} prompt_workers=${TRACKA_PROMPT_WORKERS}"
 BENCH_START=$(date +%s)
 python3 experiments/run_paper_benchmark.py \
   --gateway-url "$GATEWAY_URL" \
@@ -190,6 +192,7 @@ python3 experiments/run_paper_benchmark.py \
   --max-wild-prompts "${MAX_WILD_PROMPTS:-200}" \
   --max-strongreject-prompts "${MAX_STRONGREJECT_PROMPTS:-100}" \
   --seeds 42,43,44 \
+  --prompt-workers "$TRACKA_PROMPT_WORKERS" \
   "${JUDGE_ARGS[@]}" \
   --openai-model "$MODEL" \
   "${CK_ARGS[@]}" \
