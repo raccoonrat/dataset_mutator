@@ -1,0 +1,4 @@
+# Used when JUDGE_SOCKS5_PROXY / socks ALL_PROXY is set (OpenRouter via local SOCKS5).
+# Install without SOCKS in env: pip install -r experiments/judge_service/requirements.txt
+PySocks>=1.7.1
+requests>=2.28.0

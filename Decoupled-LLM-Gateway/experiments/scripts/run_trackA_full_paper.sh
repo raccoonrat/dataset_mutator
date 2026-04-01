@@ -33,6 +33,8 @@
 #   TRACKA_JUDGE_MODE     设为 heuristic 可恢复纯关键词裁判（不写 manifest LG4）
 #   跑分前在**同一 shell** export JUDGE_* / JUDGE_MODEL_REVISION，manifest.eval_judge_chat 会记录 revision
 #   TRACKA_PROMPT_WORKERS  行级 RSR/FPR/HPM 并发（默认 4）；设为 1 可恢复严格顺序 RNG（SmoothLLM 抖动与旧版一致）
+#   TRACKA_HF_SOCKS5 / HF_SOCKS5_PROXY  host:port，datasets 访问 huggingface.co 走 SOCKS5（未设 HTTPS_PROXY 时生效）；
+#                        可与 JUDGE_SOCKS5_PROXY 同值；自动设 NO_PROXY 含 127.0.0.1 以免网关/judge 走代理
 #
 # Local secrets / upstream (optional): place a file ./env in this repo root and run
 #   cd Decoupled-LLM-Gateway && . ./env && ./experiments/scripts/run_trackA_full_paper.sh
@@ -81,6 +83,7 @@ paper_activate_dataset_mutator
 # shellcheck source=/dev/null
 source "$ROOT/experiments/scripts/paper_common.sh"
 paper_source_env_if_present
+paper_apply_hf_proxy_env
 GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:8080}"
 UP="${GATEWAY_UPSTREAM:-https://api.deepseek.com}"
 RUN_TS="$(date +%Y%m%d_%H%M%S)"

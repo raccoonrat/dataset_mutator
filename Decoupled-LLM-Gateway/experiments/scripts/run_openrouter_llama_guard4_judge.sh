@@ -31,4 +31,18 @@ export JUDGE_OPENROUTER_X_TITLE="${JUDGE_OPENROUTER_X_TITLE:-Decoupled-LLM-Gatew
 # urllib 不走 SOCKS；OpenRouter 经本地 SOCKS5 时用（可覆盖或置空禁用）
 export JUDGE_SOCKS5_PROXY="${JUDGE_SOCKS5_PROXY:-127.0.0.1:1080}"
 
+# Same python3 as server.py must have PySocks + requests; pip must not use SOCKS (chicken-and-egg).
+judge_ensure_socks_deps() {
+  if [[ -z "${JUDGE_SOCKS5_PROXY:-}" ]]; then
+    return 0
+  fi
+  if python3 -c "import socks, requests" 2>/dev/null; then
+    return 0
+  fi
+  echo "[judge] installing PySocks+requests for SOCKS (clearing proxy env for pip only)..." >&2
+  env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy \
+    pip install -q -r "$ROOT/experiments/judge_service/requirements.txt"
+}
+judge_ensure_socks_deps
+
 exec python3 experiments/judge_service/server.py --host 127.0.0.1 --port "${JUDGE_PORT:-8765}"

@@ -8,6 +8,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+# shellcheck source=/dev/null
+source "$ROOT/experiments/scripts/paper_common.sh"
+paper_source_env_if_present
+paper_apply_hf_proxy_env
 
 if ! python3 -c "import datasets" 2>/dev/null; then
   echo "Installing benchmark dataset deps (datasets, pandas)..." >&2

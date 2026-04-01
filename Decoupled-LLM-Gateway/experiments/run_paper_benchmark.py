@@ -460,6 +460,7 @@ def chat_completions(
     extra_headers: Optional[Dict[str, str]] = None,
     timeout: float = 120.0,
     needs_upstream_bearer: bool = False,
+    disable_proxy_env: bool = False,
 ) -> Tuple[int, str, Dict[str, str]]:
     url = base.rstrip("/") + "/v1/chat/completions"
     body = json.dumps({"model": model, "messages": messages}, ensure_ascii=False).encode("utf-8")
@@ -479,7 +480,12 @@ def chat_completions(
                 req.add_header(k, v)
     t0 = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        if disable_proxy_env:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            resp_ctx = opener.open(req, timeout=timeout)
+        else:
+            resp_ctx = urllib.request.urlopen(req, timeout=timeout)
+        with resp_ctx as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             elapsed_ms = (time.perf_counter() - t0) * 1000
             if _PROGRESS is not None:
@@ -721,6 +727,7 @@ def run_scenario(
                 model=openai_model,
                 extra_headers=h,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -753,6 +760,7 @@ def run_scenario(
                 model=openai_model,
                 extra_headers=h,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -783,6 +791,7 @@ def run_scenario(
                 model=openai_model,
                 extra_headers=extra,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -860,6 +869,7 @@ def run_multi_round_extraction(
                 model=openai_model,
                 extra_headers=h,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -956,6 +966,7 @@ def _run_rsr_file_suite(
                 model=openai_model,
                 extra_headers=extra,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -1182,6 +1193,7 @@ def run_hpm_proxy_suite(
                 model=openai_model,
                 extra_headers=extra,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -1281,6 +1293,7 @@ def run_benign_fpr_suite(
                 model=openai_model,
                 extra_headers=extra,
                 needs_upstream_bearer=needs_bearer_for_defense(defense),
+                disable_proxy_env=(defense == "direct_upstream"),
             )
             return code, parse_assistant_content(raw), float(meta.get("elapsed_ms", "0"))
 
@@ -1362,6 +1375,7 @@ def _one_stress_call(
         model=openai_model,
         extra_headers=h,
         needs_upstream_bearer=needs_bearer_for_defense(defense),
+        disable_proxy_env=(defense == "direct_upstream"),
     )
 
 

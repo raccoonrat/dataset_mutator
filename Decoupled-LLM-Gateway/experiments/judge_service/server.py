@@ -142,6 +142,17 @@ def _socks_proxy_url_for_requests() -> Optional[str]:
     return None
 
 
+def _ensure_socks_deps() -> None:
+    """requests+urllib3 need PySocks installed for socks5h:// proxies."""
+    try:
+        import socks  # noqa: F401 — PySocks package name
+    except ImportError as e:
+        raise ValueError(
+            "SOCKS proxy set but PySocks is not installed. Run (without HTTPS_PROXY/ALL_PROXY on pip): "
+            "pip install -r experiments/judge_service/requirements.txt"
+        ) from e
+
+
 def _http_post_bytes(
     url: str,
     body: bytes,
@@ -155,10 +166,20 @@ def _http_post_bytes(
             import requests
         except ImportError as e:
             raise ValueError(
-                "SOCKS proxy set but requests not installed; pip install 'requests[socks]'"
+                "SOCKS proxy set but requests not installed; pip install -r experiments/judge_service/requirements.txt"
             ) from e
+        _ensure_socks_deps()
         proxies = {"http": proxy_url, "https": proxy_url}
-        r = requests.post(url, data=body, headers=headers, timeout=timeout, proxies=proxies)
+        try:
+            r = requests.post(url, data=body, headers=headers, timeout=timeout, proxies=proxies)
+        except OSError as e:
+            if "SOCKS" in str(e) or "socks" in str(e).lower():
+                raise ValueError(
+                    "SOCKS request failed (install PySocks in this Python env): "
+                    "pip install -r experiments/judge_service/requirements.txt — "
+                    "if pip itself uses SOCKS, use: env -u HTTPS_PROXY -u ALL_PROXY pip install ..."
+                ) from e
+            raise
         return int(r.status_code), r.content
     req = urllib.request.Request(url, data=body, method="POST", headers=headers)
     try:

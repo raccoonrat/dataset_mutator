@@ -105,15 +105,16 @@
 |------|------|----------------|
 | A. 脚本与裁判契约 | 无外部 LLM | `make paper-eval-check` |
 | B. 本地无 API 守卫链 | 验证输出守卫三路径 | `make smoke-output-guard`（[`smoke_output_guard.sh`](scripts/smoke_output_guard.sh)） |
-| C. 真实 API 核心场景 | 最小主表切片 | `RUN_GUIDE.md` §2.4：`benign_baseline,refusal_keyword,extraction_leak` |
-| D. 有害 + 良性 FPR（可限额） | 控制费用 | `--max-harmful-prompts`、`--max-benign-fpr-prompts`；对比 `RUN_GUIDE.md` §2.9 |
-| E. 论文级全量 | 多场景 + 多防御 + 多种子 | `--suite full` + 完整 `--defenses` + `--seeds`；见 `PIPELINE_FORMAL_DATA.md` §3 |
-| F. 输出守卫 A/B | 核对 manifest 与观感 | `scripts/run_real_upstream_guard_compare.sh` + §2.9 |
+| C. 主表协议烟测（paper-eval-5） | 与 full 对齐的 http judge + `prompt_workers` + 小 caps | [`run_trackA_smoke_main_table.sh`](scripts/run_trackA_smoke_main_table.sh) |
+| D. 真实 API 核心场景 | 最小主表切片 | `RUN_GUIDE.md` §2.4：`benign_baseline,refusal_keyword,extraction_leak` |
+| E. 有害 + 良性 FPR（可限额） | 控制费用 | `--max-harmful-prompts`、`--max-benign-fpr-prompts`；对比 `RUN_GUIDE.md` §2.9 |
+| F. 论文级全量 | 多场景 + 多防御 + 多种子 | [`run_trackA_full_paper.sh`](scripts/run_trackA_full_paper.sh)；顺序清单见 [`PAPER_FULL_RUN_CHECKLIST.md`](PAPER_FULL_RUN_CHECKLIST.md) |
+| G. 输出守卫 A/B | 核对 manifest 与观感 | `scripts/run_real_upstream_guard_compare.sh` + §2.9 |
 
 **正式数据**的操作定义建议写进论文方法节：
 
 - 上游为 **真实计费 API**；  
-- 产物为 **`manifest.protocol_version == paper-eval-4`** 的 JSON；  
+- 产物为 **`manifest.protocol_version == paper-eval-5`** 的 JSON；  
 - **原始 JSON** 与 **manifest** 一并归档（脱敏后附录或制品库）。
 
 ### 4.4 异步闭环（可选）

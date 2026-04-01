@@ -12,6 +12,9 @@ Example:
   python3 experiments/scripts/fetch_jbb_behaviors.py \\
     --misuse-out experiments/data/jbb_misuse_100_en.txt \\
     --benign-out experiments/data/jbb_benign_100_en.txt
+
+SOCKS5 for huggingface.co: export HTTPS_PROXY=socks5h://127.0.0.1:1080 and NO_PROXY=127.0.0.1,localhost
+(or use run_trackA_full_paper.sh / fetch_all_paper_datasets.sh after setting TRACKA_HF_SOCKS5=127.0.0.1:1080 in ./env).
 """
 
 from __future__ import annotations

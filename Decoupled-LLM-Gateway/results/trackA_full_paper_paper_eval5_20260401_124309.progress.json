@@ -1,0 +1,19 @@
+{
+  "progress_version": 2,
+  "updated_at_unix": 1775031590.9631474,
+  "started_at_unix": 1775018704.6280708,
+  "elapsed_s": 12886.33507657051,
+  "calls_done": 1099,
+  "calls_total_estimate": 15039,
+  "fraction_done_estimate": 0.07307666733160449,
+  "per_seed_calls_estimate": 5013,
+  "seeds_planned": 3,
+  "seeds_completed": 0,
+  "run_status": "running",
+  "seed": 42,
+  "defense": "no_decoy",
+  "scenario": "multi_round_extraction",
+  "last_status_code": 502,
+  "last_latency_ms": 120002.22649099305,
+  "last_error": "upstream: Post \"https://api.deepseek.com/v1/chat/completions\": context deadline exceeded\n"
+}

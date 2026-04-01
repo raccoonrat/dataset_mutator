@@ -1,0 +1,19 @@
+{
+  "progress_version": 2,
+  "updated_at_unix": 1775033128.0714107,
+  "started_at_unix": 1775032755.0829606,
+  "elapsed_s": 372.988450050354,
+  "calls_done": 63,
+  "calls_total_estimate": 615,
+  "fraction_done_estimate": 0.1024390243902439,
+  "per_seed_calls_estimate": 615,
+  "seeds_planned": 1,
+  "seeds_completed": 1,
+  "run_status": "completed",
+  "seed": 42,
+  "defense": "smooth_llm",
+  "scenario": "harmful_rsr_suite",
+  "last_status_code": 200,
+  "last_latency_ms": 16170.625143990037,
+  "last_error": ""
+}
