@@ -55,6 +55,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -86,6 +87,119 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
 
 def atomic_write_json(path: Path, obj: Any) -> None:
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def count_noncomment_lines(path: Optional[Path]) -> int:
+    if path is None or not Path(path).is_file():
+        return 0
+    n = 0
+    for ln in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+        s = ln.strip()
+        if s and not s.startswith("#"):
+            n += 1
+    return n
+
+
+def estimate_calls_per_defense(
+    *,
+    scenarios: List[str],
+    max_rounds: int,
+    benign_fpr_n: int,
+    harmful_n: int,
+    hpm_n: int,
+    wild_n: int,
+    strongreject_n: int,
+    stress_requests: int,
+    benign_probes: int,
+) -> int:
+    """Deterministic estimate of chat_completions calls per defense, per seed (K=1)."""
+    single = [s for s in scenarios if s in ("benign_baseline", "refusal_keyword", "extraction_leak")]
+    n = len(single)
+    if "multi_round_extraction" in scenarios:
+        n += max(0, int(max_rounds))
+    if "benign_fpr_suite" in scenarios:
+        n += max(0, int(benign_fpr_n))
+    if "harmful_rsr_suite" in scenarios:
+        n += max(0, int(harmful_n))
+    if "hpm_proxy" in scenarios:
+        n += max(0, int(hpm_n))
+    if "wild_rsr_suite" in scenarios:
+        n += max(0, int(wild_n))
+    if "strongreject_rsr_suite" in scenarios:
+        n += max(0, int(strongreject_n))
+    if "decoy_dos_sla" in scenarios:
+        n += max(0, int(stress_requests)) + max(0, int(benign_probes))
+    return n
+
+
+@dataclass
+class ProgressTracker:
+    path: Path
+    interval_s: float = 30.0
+    enabled: bool = True
+
+    started_at_unix: float = field(default_factory=lambda: time.time())
+    last_write_unix: float = 0.0
+    calls_done: int = 0
+    calls_total_estimate: int = 0
+    seed: Optional[int] = None
+    defense: str = ""
+    scenario: str = ""
+    last_status_code: Optional[int] = None
+    last_latency_ms: Optional[float] = None
+    last_error: str = ""
+
+    @contextmanager
+    def scope(self, *, seed: Optional[int] = None, defense: str = "", scenario: str = ""):
+        old_seed, old_def, old_scn = self.seed, self.defense, self.scenario
+        if seed is not None:
+            self.seed = seed
+        if defense != "":
+            self.defense = defense
+        if scenario != "":
+            self.scenario = scenario
+        try:
+            yield
+        finally:
+            self.seed, self.defense, self.scenario = old_seed, old_def, old_scn
+
+    def record_call(self, *, status_code: int, latency_ms: float, error: str = "") -> None:
+        if not self.enabled:
+            return
+        self.calls_done += 1
+        self.last_status_code = status_code
+        self.last_latency_ms = latency_ms
+        self.last_error = (error or "")[:500]
+        self.maybe_write(force=False)
+
+    def maybe_write(self, *, force: bool) -> None:
+        if not self.enabled:
+            return
+        now = time.time()
+        if not force and self.interval_s > 0 and (now - self.last_write_unix) < self.interval_s:
+            return
+        doc = {
+            "progress_version": 1,
+            "updated_at_unix": now,
+            "started_at_unix": self.started_at_unix,
+            "elapsed_s": max(0.0, now - self.started_at_unix),
+            "calls_done": self.calls_done,
+            "calls_total_estimate": self.calls_total_estimate,
+            "fraction_done_estimate": (
+                (self.calls_done / self.calls_total_estimate) if self.calls_total_estimate else None
+            ),
+            "seed": self.seed,
+            "defense": self.defense,
+            "scenario": self.scenario,
+            "last_status_code": self.last_status_code,
+            "last_latency_ms": self.last_latency_ms,
+            "last_error": self.last_error,
+        }
+        atomic_write_json(self.path, doc)
+        self.last_write_unix = now
+
+
+_PROGRESS: Optional[ProgressTracker] = None
 
 
 def build_matrix_fingerprint(
@@ -292,13 +406,19 @@ def chat_completions(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             elapsed_ms = (time.perf_counter() - t0) * 1000
+            if _PROGRESS is not None:
+                _PROGRESS.record_call(status_code=resp.status, latency_ms=elapsed_ms)
             return resp.status, raw, {"elapsed_ms": f"{elapsed_ms:.3f}"}
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
         elapsed_ms = (time.perf_counter() - t0) * 1000
+        if _PROGRESS is not None:
+            _PROGRESS.record_call(status_code=e.code, latency_ms=elapsed_ms, error=raw)
         return e.code, raw, {"elapsed_ms": f"{elapsed_ms:.3f}"}
     except Exception as e:  # noqa: BLE001
         elapsed_ms = (time.perf_counter() - t0) * 1000
+        if _PROGRESS is not None:
+            _PROGRESS.record_call(status_code=-1, latency_ms=elapsed_ms, error=str(e))
         return -1, str(e), {"elapsed_ms": f"{elapsed_ms:.3f}"}
 
 
@@ -500,6 +620,9 @@ def run_scenario(
     smooth: SmoothLLMConfig,
     gateway_output_guard: bool = False,
 ) -> ScenarioResult:
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = name
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     secret = "TOPSECRET-EVAL-42"
@@ -615,6 +738,9 @@ def run_multi_round_extraction(
     gateway_output_guard: bool = False,
     cra_json_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = "multi_round_extraction"
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
     secret = "TOPSECRET-EVAL-42"
@@ -723,6 +849,9 @@ def _run_rsr_file_suite(
     source_tag: str = "",
 ) -> Dict[str, Any]:
     """RSR over a plain-line prompt file (harmful goals, wild jailbreaks, StrongREJECT, etc.)."""
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = scenario_id
     lines = _read_prompt_lines(prompts_path)
     if max_prompts is not None:
         lines = lines[: max(0, max_prompts)]
@@ -910,6 +1039,9 @@ def run_hpm_proxy_suite(
     gateway_output_guard: bool = False,
 ) -> Dict[str, Any]:
     """Track A proxy for §5 axis (ii): refusal under social-pressure framing (not full HPM dataset)."""
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = "hpm_proxy"
     lines = _read_prompt_lines(prompts_path)
     extra = defense_extra_headers(defense, gateway_output_guard=gateway_output_guard)
     base = resolve_base(defense, gateway, upstream)
@@ -978,6 +1110,9 @@ def run_benign_fpr_suite(
     gateway_output_guard: bool = False,
     max_prompts: Optional[int] = None,
 ) -> Dict[str, Any]:
+    if _PROGRESS is not None:
+        _PROGRESS.defense = defense
+        _PROGRESS.scenario = "benign_fpr_suite"
     lines = _read_prompt_lines(prompts_path)
     if max_prompts is not None:
         lines = lines[: max(0, max_prompts)]
@@ -1532,6 +1667,17 @@ def main() -> None:
     )
     ap.add_argument("--output", "-o")
     ap.add_argument(
+        "--progress",
+        default="",
+        help="write live progress JSON (call counts + current seed/defense/scenario); default: <output-stem>.progress.json next to -o",
+    )
+    ap.add_argument(
+        "--progress-interval-sec",
+        type=float,
+        default=30.0,
+        help="min seconds between progress JSON writes (0 disables periodic writes; still writes on start/end when enabled)",
+    )
+    ap.add_argument(
         "--checkpoint",
         default="",
         help="resumable state JSON path; default: <output-stem>.checkpoint.json next to -o (only when -o set)",
@@ -1654,6 +1800,40 @@ def main() -> None:
         else:
             ckpt_path = out_path.with_name(out_path.stem + ".checkpoint.json")
 
+    # Live progress (fine-grained, call-level). Independent of resume checkpoint.
+    global _PROGRESS
+    _PROGRESS = None
+    prog_path: Optional[Path] = None
+    if out_path is not None:
+        if args.progress.strip():
+            prog_path = Path(args.progress.strip())
+        else:
+            prog_path = out_path.with_name(out_path.stem + ".progress.json")
+    if prog_path is not None:
+        benign_n = count_noncomment_lines(benign_path)
+        harmful_n = count_noncomment_lines(harmful_path)
+        hpm_n = count_noncomment_lines(hpm_path)
+        wild_n = min(int(args.max_wild_prompts) if args.max_wild_prompts is not None else 10**9, count_noncomment_lines(wild_path))
+        sr_n = min(
+            int(args.max_strongreject_prompts) if args.max_strongreject_prompts is not None else 10**9,
+            count_noncomment_lines(sr_path),
+        )
+        per_def = estimate_calls_per_defense(
+            scenarios=scenarios,
+            max_rounds=args.max_rounds,
+            benign_fpr_n=benign_n,
+            harmful_n=harmful_n,
+            hpm_n=hpm_n,
+            wild_n=wild_n,
+            strongreject_n=sr_n,
+            stress_requests=args.stress_requests,
+            benign_probes=args.benign_probes,
+        )
+        est_total = max(0, per_def * len(defenses) * len(seed_list))
+        _PROGRESS = ProgressTracker(path=prog_path, interval_s=max(0.0, float(args.progress_interval_sec)))
+        _PROGRESS.calls_total_estimate = est_total
+        _PROGRESS.maybe_write(force=True)
+
     all_runs: List[Dict[str, Any]] = []
     if use_ckpt and ckpt_path is not None and args.resume and ckpt_path.is_file():
         raw_ck = json.loads(ckpt_path.read_text(encoding="utf-8"))
@@ -1697,6 +1877,9 @@ def main() -> None:
 
     for sd in pending:
         rng = random.Random(sd)
+        if _PROGRESS is not None:
+            _PROGRESS.seed = sd
+            _PROGRESS.maybe_write(force=True)
         results = run_matrix(
             defenses,
             scenarios,
@@ -1731,6 +1914,8 @@ def main() -> None:
         write_checkpoint()
         if ckpt_path is not None:
             print(f"checkpoint: seed {sd} saved -> {ckpt_path}", file=sys.stderr)
+        if _PROGRESS is not None:
+            _PROGRESS.maybe_write(force=True)
 
     doc: Dict[str, Any] = {
         "manifest": manifest,
