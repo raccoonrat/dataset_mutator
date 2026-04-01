@@ -1,0 +1,19 @@
+{
+  "progress_version": 2,
+  "updated_at_unix": 1775036485.263488,
+  "started_at_unix": 1775034577.2086651,
+  "elapsed_s": 1908.054822921753,
+  "calls_done": 447,
+  "calls_total_estimate": 15039,
+  "fraction_done_estimate": 0.029722720925593457,
+  "per_seed_calls_estimate": 5013,
+  "seeds_planned": 3,
+  "seeds_completed": 0,
+  "run_status": "running",
+  "seed": 42,
+  "defense": "unified",
+  "scenario": "strongreject_rsr_suite",
+  "last_status_code": 200,
+  "last_latency_ms": 17502.483945005224,
+  "last_error": ""
+}
