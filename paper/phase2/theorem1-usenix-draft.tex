@@ -1,0 +1,188 @@
+\documentclass[letterpaper,twocolumn,10pt]{article}
+
+% USENIX 2020 style (ATC'20 / Security'20 era)
+\usepackage{./usenix-2020-09}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{CJKutf8}
+
+\newtheorem{theorem}{定理}
+\newtheorem{definition}{定义}
+\newtheorem{lemma}{引理}
+\newtheorem{corollary}{推论}
+
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Strings}{\Sigma^{*}}
+\newcommand{\supp}{\mathrm{supp}}
+
+\begin{document}
+
+\begin{CJK}{UTF8}{gbsn}
+
+\title{全局隐式安全不可验证性：从停机问题到解耦安全的形式化路径}
+
+\author{%
+匿名作者\\
+匿名机构\\
+\texttt{anon@example.com}%
+}
+
+\maketitle
+
+\begin{abstract}
+随着大语言模型（LLM）被部署到安全敏感领域，研究界普遍希望通过对齐（如 SFT/RLHF/Constitutional AI）在模型参数内部实现\emph{全局}安全保证。本文从理论计算机科学与形式化验证视角提出并论证一个核心结论：对任意图灵完备的概率程序（可视作 LLM 的理想化语义模型），对非平凡语义安全性质的\emph{全局隐式}验证在一般情形下是不可判定的；在引入概率边界与“几乎必然”语义后，其验证复杂度可上升至算术分层更高层级。基于这一不可验证性屏障，我们提出“解耦安全”作为理论上必要的架构迁移：将安全性从参数空间（隐式）移出，转化为对单次执行轨迹的外部、可判定的运行时监督/监控，从而获得实例级可验证保证。我们给出形式化定义、停机问题/赖斯定理归约证明、概率语义的复杂性讨论，并给出解耦架构下实例级可验证性的定理化论证。
+\end{abstract}
+
+\section{引言}
+对 LLM 的安全性讨论常在工程语境中展开：通过数据、微调、对齐、红队评测等手段降低不安全输出概率。然而，当目标被表述为“对\emph{所有}输入、\emph{所有}可能输出都安全”的\emph{全局硬约束}时，问题从经验评测跃迁为形式化验证问题：我们是否能在一般性前提下判定某个模型满足给定安全性质？
+
+本文聚焦一种常被默认、却很少被严格审视的目标：\textbf{全局隐式安全}，即安全性由模型内部参数与生成机制“内生地”保证，而不是由外部监控或约束模块施加。我们表明：在将 LLM 视作图灵完备的概率程序时，验证此类全局隐式安全目标不可避免地触及停机问题与赖斯定理，从而导出不可判定性屏障。该结论并不否定对齐技术在经验分布上的有效性，但说明其无法提供面向\emph{无限输入空间}的普适硬保证。
+
+\textbf{贡献。}本文的主要贡献如下：
+\begin{itemize}[leftmargin=*,itemsep=0.2em]
+  \item 形式化 LLM 为概率程序，并给出全局外延安全与概率级安全的谓词化定义。
+  \item 证明定理\ref{thm:undecidable}: 对任意图灵完备概率程序与非平凡安全语义性质，判定其是否满足全局隐式安全不可判定（停机问题归约；亦可视作赖斯定理推论）。
+  \item 讨论概率边界/几乎必然语义下验证问题在算术分层中的位置，解释“采样未发现反例”无法构成证据的根本原因。
+  \item 提出解耦安全架构并形式化证明实例级安全在可判定监督器下可多项式时间验证（定理\ref{thm:decoupled}）。
+\end{itemize}
+
+\section{模型：LLM 作为图灵完备概率程序}
+为了进入可验证性讨论，我们先给出一个理想化但标准的建模方式：将 LLM 视为对字符串输入进行随机化计算并输出字符串的程序。
+
+\begin{definition}[概率程序语义下的模型]\label{def:probprog}
+设有限字母表为 $\Sigma$，输入空间与输出空间均为 $\Strings$。一个语言模型 $M$ 被建模为映射
+\[
+M:\Strings \to \mathcal{D}(\Strings),
+\]
+其中 $\mathcal{D}(\Strings)$ 表示在 $\Strings$ 上的概率分布集合。对输入 $x\in\Strings$，模型根据分布 $M(x)$ 进行采样并生成输出 $y\in\Strings$。
+\end{definition}
+
+在极限意义上，如果允许模型通过足够长的上下文、外部记忆或递归调用实现任意可计算过程，则该概率程序可被认为具有图灵完备能力。这一抽象是为了将“通用智能系统”的可验证性上界与经典不可判定性结果对齐；后文也将讨论有界计算时的复杂度降级。
+
+\section{安全属性：全局外延谓词与概率级谓词}
+我们将安全性视作输入--输出对的语义谓词，而不是训练损失或经验指标。
+
+\begin{definition}[全局外延安全性质]\label{def:global}
+令 $P(x,y)$ 是一个\emph{非平凡}的语义安全谓词（既非对所有 $(x,y)$ 恒真，也非恒假）。对模型 $M$，定义其满足全局隐式安全当且仅当
+\[
+\forall x\in\Strings,\ \forall y\in\supp(M(x)),\ P(x,y).
+\]
+\end{definition}
+
+\begin{definition}[概率级安全性质]\label{def:prob}
+给定容忍度 $\delta\in(0,1)$，模型满足概率级安全性质当且仅当
+\[
+\forall x\in\Strings,\ \Prob_{y\sim M(x)}\big[\neg P(x,y)\big] \le \delta.
+\]
+\end{definition}
+
+定义\ref{def:global}表达的是“支持集上零风险”的硬约束；定义\ref{def:prob}允许少量失败概率，但仍要求对\emph{全局输入空间}给出统一界。
+
+\section{定理1：全局隐式安全不可验证性}\label{sec:thm1}
+本节给出本文的核心结果：对图灵完备概率程序，判断其是否满足定义\ref{def:global}不可判定。
+
+\begin{theorem}[全局隐式安全不可验证性]\label{thm:undecidable}
+对任意图灵完备的概率程序 $M$ 与任意非平凡语义安全谓词 $P$，判定命题
+\[
+\forall x\in\Strings,\ \forall y\in\supp(M(x)),\ P(x,y)
+\]
+在一般情形下是不可判定的。
+\end{theorem}
+
+\begin{proof}[证明（停机问题归约；证明纲要）]
+取任意图灵机 $T$ 及其输入 $w$，停机问题要求判定 $T(w)$ 是否停机。我们构造一个概率程序 $M_{T,w}$，其在给定输入 $x$ 时执行如下逻辑：
+\begin{enumerate}[leftmargin=*,itemsep=0.2em]
+  \item 在内部模拟 $T(w)$ 的运行；
+  \item 若模拟检测到 $T(w)$ 停机，则输出一个固定的不安全字符串 $y_{\mathsf{bad}}$，使得 $P(x,y_{\mathsf{bad}})$ 为假；
+  \item 若 $T(w)$ 不停机，则 $M_{T,w}$ 永不停机，或输出一个固定安全字符串 $y_{\mathsf{safe}}$（使得 $P(x,y_{\mathsf{safe}})$ 为真），并确保 $y_{\mathsf{bad}}$ 不落入输出支持集。
+\end{enumerate}
+于是有等价性：$M_{T,w}$ 满足定义\ref{def:global} 当且仅当 $T(w)$ 不停机。若存在算法能判定任意 $M$ 的全局隐式安全，则可用以判定停机问题，矛盾。故该验证问题不可判定。
+\end{proof}
+
+\paragraph{与赖斯定理的关系。}
+上述归约也可视作赖斯定理的一个直接实例：全局安全性是关于程序计算之（概率）函数的非平凡语义性质，因此不可判定。
+
+\section{概率语义下的复杂性：算术分层视角}
+将安全从“支持集零风险”推广到概率边界（定义\ref{def:prob}）后，验证任务不再只是“是否存在反例输出”，而是涉及对概率质量的全量词约束。直觉上，这类性质常呈现 $\forall x\,\forall \varepsilon\,\exists N$ 的量词结构：对任意输入与误差阈值，总存在有限步骤使得观察到的安全概率超过某界。这使得问题在算术分层中可上升到更高层级（例如 $\Pi^0_2$ 及以上），从而解释经验采样的根本局限：即使进行了大量采样也只能支持“未观察到反例”，而无法排除深层执行路径中仍存在非零概率的不安全分支。
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+性质类型 & 形式化表示（示意） & 典型复杂度位置 & 直观含义 \\
+\midrule
+单次实例安全 & $P(x,y)$ & 可判定（取决于 $P$） & 对给定轨迹判断 \\
+确定性全局安全 & $\forall x\,\forall y\,P$ & 不可判定（Co-RE 等） & 量词化爆炸 \\
+概率边界安全 & $\forall x\,\Prob[\neg P]\le\delta$ & 更高阶不可判定 & 概率+全量词 \\
+几乎必然安全 & $\Prob[\text{always }P]=1$ & 常与终止性同难 & “几乎必然”语义 \\
+\bottomrule
+\end{tabular}
+\vspace{-0.5em}
+\caption{不同安全定义的可验证性层级（概念性对比）。}
+\label{tab:hierarchy}
+\end{table*}
+
+\section{对齐范式的理论边界：期望优化 vs.\ 硬约束}
+主流对齐方法（如 RLHF）通常通过优化期望奖励实现“平均意义上的更安全”。然而，全局隐式安全属于全量词硬约束：只要存在任意输入与任意一个可产生的不安全输出（哪怕概率极小），定义\ref{def:global}即被否定。期望优化并不等价于硬约束满足；因此不可判定性定理并不意味着对齐“无用”，而是说明其无法在一般前提下提供\emph{普适的形式化硬保证}。
+
+\section{有限状态/有界计算下：从不可判定到不可承受}
+现实系统常施加上下文长度、步数、算力等边界；此时“不可判定”可降级为“可判定但难”。既有研究指出，即便对简单的 ReLU 网络，验证输出是否落入安全集合也可达到 coNP-Complete 级别。对具有巨量参数与复杂非线性组合的 Transformer，穷举或全局优化式验证往往在工程上不可承受。
+
+\section{解耦安全：把全局问题降维到实例级}\label{sec:decoupled}
+不可验证性结果指向一个设计原则：\textbf{不要试图在模型内部获得全局硬保证}；相反，应在系统层面引入外部、显式、可判定的约束机制，对每次生成进行监控/拦截/投影。
+
+\begin{definition}[解耦安全架构]\label{def:decouple}
+系统由黑盒生成器 $M$ 与外部监督器/监控器 $G$ 组成。给定输入 $x$，生成器产生候选输出 $y$，监督器计算 $G(x,y)\in\{0,1\}$ 或给出修正/拒绝动作。系统对外输出仅来自满足 $G(x,y)=1$ 的候选（或其修正版本）。
+\end{definition}
+
+\begin{theorem}[解耦安全的实例级可验证性]\label{thm:decoupled}
+设 $M$ 为任意复杂度的黑盒模型。若监督器 $G(x,y)$ 属于可判定函数类（例如多项式时间可计算），则对任意给定实例 $(x,y)$，判定 $G(x,y)=1$ 可在多项式时间内完成；从而系统层面的“实例级安全检查”是可验证的。
+\end{theorem}
+
+\begin{proof}[证明]
+该验证不再要求对所有可能输出或支持集进行遍历，而仅对已生成的具体字符串 $y$ 计算 $G(x,y)$。当 $G$ 可判定（尤其是多项式时间）时，验证过程在有限步内完成，复杂度由 $G$ 的计算复杂度界定。
+\end{proof}
+
+\paragraph{讨论。}
+解耦安全并不宣称“生成器本身全局安全”，而是将系统安全保证锚定在\emph{外部可审计逻辑}与\emph{运行时执行轨迹}上。它将不可判定/高复杂度的全局语义性质，转化为可判定的实例检查问题，并允许安全策略独立迭代（无需重新训练生成器）。
+
+\section{局限与开放问题}
+\begin{itemize}[leftmargin=*,itemsep=0.2em]
+  \item 监督器 $G$ 的设计空间很大：关键词过滤、形式化策略（正则语言/自动机）、SMT/类型系统式局部校验、基于语义的合规判定等，其可判定性与表达力存在权衡。
+  \item 解耦安全提供的是系统级“输出可控性”，但无法覆盖所有外部性风险（例如工具调用、副作用、分布外输入导致的误判等），需要与访问控制、沙箱、审计等机制结合。
+  \item 概率语义下的更精确层级分类、以及“几乎必然安全”与终止性等性质的等价/归约关系，仍有进一步形式化空间。
+\end{itemize}
+
+\section{结论}
+本文给出了“全局隐式安全不可验证性”的形式化陈述与证明纲要，指出将安全作为模型内部参数对齐的全局硬约束目标会触及不可判定性与高复杂度屏障。我们主张并形式化论证了解耦安全的必要性：将安全逻辑从不可审计的参数空间移出，落在外部可判定监督器与运行时监控上，以实例级验证替代全局验证，从而获得可解释、可审计、可演进的系统级安全保证。
+
+\section*{参考文献（占位，后续可替换为 Bib\TeX）}
+\begin{thebibliography}{10}\setlength{\itemsep}{0pt}
+\bibitem{rice}
+H.~G. Rice.
+\newblock Classes of recursively enumerable sets and their decision problems.
+\newblock {\em Transactions of the American Mathematical Society}, 1953.
+
+\bibitem{turing}
+A.~M. Turing.
+\newblock On computable numbers, with an application to the {E}ntscheidungsproblem.
+\newblock {\em Proceedings of the London Mathematical Society}, 1936.
+
+\bibitem{arith-hier}
+S.~C. Kleene.
+\newblock {\em Introduction to Metamathematics}.
+\newblock North-Holland, 1952. （算术分层经典来源之一）
+
+\bibitem{relu-verify}
+（占位）ReLU 网络验证复杂度相关工作：可在最终版本中补充准确条目与年份。
+\end{thebibliography}
+
+\end{CJK}
+
+\end{document}
+
