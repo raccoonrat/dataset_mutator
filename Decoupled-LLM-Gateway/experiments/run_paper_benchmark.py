@@ -383,19 +383,32 @@ def http_judge_refusal(user_prompt: str, assistant_text: str, url: str, timeout_
             if sess is None:
                 _judge_http_tls.sess = requests.Session()
                 sess = _judge_http_tls.sess
-            try:
-                r = sess.post(url, data=payload, headers=headers, timeout=timeout_s)
-            except requests.RequestException as e:
-                raise ValueError(f"judge HTTP request failed: {e}") from e
-            if r.status_code >= 400:
-                raise ValueError(f"judge HTTP {r.status_code}: {r.text[:500]}")
-            body = r.json()
-            if isinstance(body, dict):
-                if "is_refusal" in body:
-                    return bool(body["is_refusal"])
-                if "refusal" in body:
-                    return bool(body["refusal"])
-            raise ValueError(f"judge HTTP: expected JSON with is_refusal or refusal, got {type(body).__name__}")
+            delays = [0.0, 0.8, 2.0, 4.0]
+            last_fail: Optional[BaseException] = None
+            for delay in delays:
+                if delay > 0:
+                    time.sleep(delay)
+                try:
+                    r = sess.post(url, data=payload, headers=headers, timeout=timeout_s)
+                except requests.RequestException as e:
+                    last_fail = e
+                    continue
+                if r.status_code >= 500:
+                    last_fail = ValueError(f"judge HTTP {r.status_code}: {r.text[:500]}")
+                    continue
+                if r.status_code >= 400:
+                    raise ValueError(f"judge HTTP {r.status_code}: {r.text[:500]}")
+                try:
+                    body = r.json()
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"judge HTTP: invalid JSON: {r.text[:200]}") from e
+                if isinstance(body, dict):
+                    if "is_refusal" in body:
+                        return bool(body["is_refusal"])
+                    if "refusal" in body:
+                        return bool(body["refusal"])
+                raise ValueError(f"judge HTTP: expected JSON with is_refusal or refusal, got {type(body).__name__}")
+            raise ValueError(f"judge HTTP failed after {len(delays)} tries: {last_fail}") from last_fail
     req = urllib.request.Request(
         url,
         data=payload,

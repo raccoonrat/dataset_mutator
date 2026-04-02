@@ -153,6 +153,27 @@ def _ensure_socks_deps() -> None:
         ) from e
 
 
+def _map_socks_transport_error(exc: BaseException) -> Optional[ValueError]:
+    """Map requests/urllib3 SOCKS-path failures to ValueError (caller should ``raise v from exc``)."""
+    el = str(exc).lower()
+    if "missing dependencies for socks" in el or (
+        "socks" in el and ("no module named" in el or "pysocks" in el)
+    ):
+        return ValueError(
+            "SOCKS request failed (install PySocks in this Python env): "
+            "pip install -r experiments/judge_service/requirements.txt — "
+            "if pip itself uses SOCKS, use: env -u HTTPS_PROXY -u ALL_PROXY pip install ..."
+        )
+    if "socks" in el or "socks5" in el:
+        return ValueError(
+            "HTTPS outbound via SOCKS proxy failed (proxy down, reset, overload, or TLS issue — "
+            "PySocks may already be installed). Try: check local SOCKS, lower benchmark "
+            "`--prompt-workers`, or unset JUDGE_SOCKS5_PROXY if OpenRouter is reachable directly. "
+            f"Detail: {str(exc)[:400]}"
+        )
+    return None
+
+
 def _http_post_bytes(
     url: str,
     body: bytes,
@@ -173,12 +194,14 @@ def _http_post_bytes(
         try:
             r = requests.post(url, data=body, headers=headers, timeout=timeout, proxies=proxies)
         except OSError as e:
-            if "SOCKS" in str(e) or "socks" in str(e).lower():
-                raise ValueError(
-                    "SOCKS request failed (install PySocks in this Python env): "
-                    "pip install -r experiments/judge_service/requirements.txt — "
-                    "if pip itself uses SOCKS, use: env -u HTTPS_PROXY -u ALL_PROXY pip install ..."
-                ) from e
+            v = _map_socks_transport_error(e)
+            if v is not None:
+                raise v from e
+            raise
+        except Exception as e:
+            v = _map_socks_transport_error(e)
+            if v is not None:
+                raise v from e
             raise
         return int(r.status_code), r.content
     req = urllib.request.Request(url, data=body, method="POST", headers=headers)
@@ -393,6 +416,28 @@ def self_check() -> None:
     print("judge_service self-check ok", file=sys.stderr)
 
 
+def _preflight_socks_deps_if_proxy_configured() -> None:
+    """Fail fast at startup when SOCKS is set but PySocks/requests are unusable (avoids opaque first-request 500)."""
+    if not _socks_proxy_url_for_requests():
+        return
+    _ensure_socks_deps()
+    try:
+        import requests  # noqa: F401
+    except ImportError as e:
+        print(
+            "judge_service: SOCKS proxy is set but `requests` is not installed. "
+            "pip install -r experiments/judge_service/requirements.txt "
+            "(use env -u HTTPS_PROXY -u ALL_PROXY if pip breaks on SOCKS).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from e
+    print(
+        f"judge_service: SOCKS outbound enabled ({_socks_proxy_url_for_requests()!r}); "
+        f"python={sys.executable}",
+        file=sys.stderr,
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="HTTP refusal judge for paper-eval")
     ap.add_argument("--host", default="127.0.0.1")
@@ -402,6 +447,11 @@ def main() -> None:
     if args.self_check:
         self_check()
         return
+    try:
+        _preflight_socks_deps_if_proxy_configured()
+    except ValueError as e:
+        print(f"judge_service: {e}", file=sys.stderr)
+        raise SystemExit(1) from e
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print(
         f"judge_service listening on http://{args.host}:{args.port} "

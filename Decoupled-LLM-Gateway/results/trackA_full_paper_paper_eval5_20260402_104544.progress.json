@@ -1,0 +1,19 @@
+{
+  "progress_version": 2,
+  "updated_at_unix": 1775107775.5153837,
+  "started_at_unix": 1775097945.5752616,
+  "elapsed_s": 9829.940122127533,
+  "calls_done": 2332,
+  "calls_total_estimate": 15039,
+  "fraction_done_estimate": 0.1550635015626039,
+  "per_seed_calls_estimate": 5013,
+  "seeds_planned": 3,
+  "seeds_completed": 0,
+  "run_status": "running",
+  "seed": 42,
+  "defense": "direct_upstream",
+  "scenario": "benign_fpr_suite",
+  "last_status_code": 200,
+  "last_latency_ms": 64417.00071998639,
+  "last_error": ""
+}
