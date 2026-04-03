@@ -229,3 +229,6 @@ env
 
 # Local Go gateway binaries (go build -o bin/)
 Decoupled-LLM-Gateway/bin/
+
+# Windows NTFS alternate data stream markers (e.g. "Mark of the Web" after download)
+**/*:Zone.Identifier
