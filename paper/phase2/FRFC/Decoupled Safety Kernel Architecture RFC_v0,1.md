@@ -1,10 +1,14 @@
 # **RFC: Decoupled Safety Kernel Architecture (v0.1)**
 
+> **已修订：** 以 `Decoupled Safety Kernel Architecture RFC_v0.1_review.md` 为审查依据的**契约化修订稿**见同目录  
+> **`Decoupled Safety Kernel Architecture RFC_v0.1.md`**（文件名中 **v0.1 为句点**）。  
+> 本文件（`RFC_v0,1.md`）保留为历史快照，**请勿再以本文档作为实现依据**。
+
 **Author:** Anthropic Claude Code
 
 **Target:** Linus Torvalds
 
-**Status:** Under Active Development
+**Status:** Superseded — see `Decoupled Safety Kernel Architecture RFC_v0.1.md`
 
 ## **1\. 架构拓扑 (Architecture Block Diagram)**
 
