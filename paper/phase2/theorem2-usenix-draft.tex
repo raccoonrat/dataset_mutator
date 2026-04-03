@@ -1,0 +1,134 @@
+\documentclass[letterpaper,twocolumn,10pt]{article}
+
+% USENIX 2020 style
+\usepackage{./usenix-2020-09}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{CJKutf8}
+
+% theorem environments
+\newtheorem{theorem}{定理}
+\newtheorem{definition}{定义}
+\newtheorem{lemma}{引理}
+\newtheorem{proposition}{命题}
+\newtheorem{corollary}{推论}
+
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Strings}{\Sigma^{*}}
+\newcommand{\supp}{\mathrm{supp}}
+
+% Notation
+\newcommand{\Safe}{\mathsf{Safe}}
+\newcommand{\Dec}{\mathsf{Dec}}
+\newcommand{\Proj}{\Pi}
+\newcommand{\Out}{\mathcal{Y}}
+\newcommand{\In}{\mathcal{X}}
+\newcommand{\Nat}{\mathbb{N}}
+\newcommand{\poly}{\mathrm{poly}}
+
+\begin{document}
+\begin{CJK}{UTF8}{gbsn}
+
+\title{解耦安全：可验证性与约束投影的系统级定理化框架（定理2论文草稿）}
+
+\author{匿名作者\\匿名机构\\\texttt{anon@example.com}}
+
+\maketitle
+
+\begin{abstract}
+本文严格化“解耦安全：可验证性与约束投影”中的两项核心结论：（i）将安全验证对象从生成分布切换为已生成实例，可将安全验证从全局不可判定问题降维为实例级可判定/多项式时间问题；（ii）将安全干预表述为向安全集合的约束投影，并给出其在有界离散输出空间中的存在性与复杂性边界。全文仅使用严密的数学语言（Definition/Lemma/Theorem/Proof）给出定理化陈述与证明。
+\end{abstract}
+
+\section{预备定义（忠于原文的形式化对象）}
+\begin{definition}[输入/输出空间与生成器]\label{def:spaces}
+令输入空间为 $\In$，输出空间为 $\Out$。生成器（基础模型）是映射
+\[
+M:\In\to \mathcal{D}(\Out),
+\]
+其中 $\mathcal{D}(\Out)$ 表示 $\Out$ 上的概率分布集合；对 $x\in\In$，模型输出候选 $y\sim M(x)$。
+\end{definition}
+
+\begin{definition}[安全谓词与安全集合]\label{def:safe-set}
+给定二元谓词 $\Safe:\In\times\Out\to\{0,1\}$。对任意输入 $x$，定义安全集合
+\[
+C(x)\triangleq \{y\in\Out\mid \Safe(x,y)=1\}.
+\]
+\end{definition}
+
+\begin{definition}[可判定函数类]\label{def:decidable-class}
+若函数（算子）$f$ 能由确定性图灵机在有限时间内计算完成，且对相同输入总产生确定输出，则称 $f$ 属于可判定函数类，记作 $f\in\Dec$。
+\end{definition}
+
+\begin{definition}[解耦安全算子（安全判定/修正算子）]\label{def:ds-operator}
+解耦安全算子是函数
+\[
+S:\In\times \Out\to \Out.
+\]
+我们要求 $S\in\Dec$，并要求其满足\emph{正确性}（soundness）：
+\[
+\forall x\in\In,\ \forall y\in\Out,\ \Safe(x,S(x,y))=1.
+\]
+\end{definition}
+
+\section{定理A：实例级可验证性（复杂性降维）}
+\begin{definition}[实例级验证问题]\label{def:instance-problem}
+给定确定性算法（判定器）$D:\In\times \Out\to\{0,1\}$，实例级安全验证问题是：对输入 $(x,y)$ 计算 $D(x,y)$ 并在有限时间内返回。
+\end{definition}
+
+\begin{theorem}[定理A：实例级可验证性]\label{thm:A}
+若存在安全判定算子（判定器）$D\in\Dec$，则对任意给定实例 $(x,y)$，命题“$\Safe(x,y)=1$”在有限时间内可判定；若 $D$ 的运行时间被某个多项式 $\poly(|x|+|y|)$ 上界，则实例级判定为多项式时间。
+\end{theorem}
+
+\begin{proof}
+由 $D\in\Dec$ 的定义，$D$ 在任意输入 $(x,y)$ 上必停机并输出确定值，因此判定在有限时间内完成。若进一步给出时间上界为 $\poly(|x|+|y|)$，则判定在多项式时间内完成。
+\end{proof}
+
+\section{约束投影：几何表述与存在性}
+\begin{definition}[约束投影算子]\label{def:projection}
+给定成本函数 $d_x:\Out\times\Out\to \Nat$（依赖于 $x$ 的距离/代价），定义投影算子
+\[
+\Proj_C(x,y)\in\arg\min_{y'\in C(x)} d_x(y,y').
+\]
+\end{definition}
+
+\begin{theorem}[定理B：投影算子的存在性]\label{thm:B}
+假设对任意 $x$，$C(x)$ 非空。进一步假设我们只考虑有界输出空间 $\Out_{\le T}\subseteq\Out$，使得对任意 $x$，集合 $C(x)\cap \Out_{\le T}$ 有限且非空，并且 $d_x(y,\cdot)$ 在该集合上取值于 $\Nat$。则对任意 $x$ 与任意 $y\in \Out_{\le T}$，投影 $\Proj_C(x,y)$ 存在。
+\end{theorem}
+
+\begin{proof}
+集合 $C(x)\cap\Out_{\le T}$ 有限非空，函数 $d_x(y,\cdot)$ 在其上取有限个自然数值，必存在最小值并由某个元素取得；任取一个最小值的取得点即为投影输出。
+\end{proof}
+
+\begin{lemma}[投影的安全性（由定义直接推出）]\label{lem:proj-sound}
+在定理\ref{thm:B}的前提下，任意投影输出 $y'\in \Proj_C(x,y)$ 都满足 $\Safe(x,y')=1$。
+\end{lemma}
+
+\begin{proof}
+由投影定义\ref{def:projection}可知 $y'\in C(x)$，再由安全集合定义\ref{def:safe-set}得 $\Safe(x,y')=1$。
+\end{proof}
+
+\section*{参考文献（占位）}
+\begin{thebibliography}{10}\setlength{\itemsep}{0pt}
+\bibitem{turing}
+A.~M. Turing.
+\newblock On computable numbers, with an application to the {E}ntscheidungsproblem.
+\newblock {\em Proceedings of the London Mathematical Society}, 1936.
+
+\bibitem{rice}
+H.~G. Rice.
+\newblock Classes of recursively enumerable sets and their decision problems.
+\newblock {\em Transactions of the American Mathematical Society}, 1953.
+
+\bibitem{safety-liveness}
+B.~Alpern and F.~B. Schneider.
+\newblock Defining liveness.
+\newblock {\em Information Processing Letters}, 1985. (安全/活性分解经典结果)
+\end{thebibliography}
+
+\end{CJK}
+\end{document}
+
