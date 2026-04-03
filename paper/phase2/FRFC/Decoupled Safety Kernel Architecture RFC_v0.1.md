@@ -1,9 +1,11 @@
 # RFC: Decoupled Safety Kernel Architecture (v0.1, revised)
 
+> **后续版本：** 发布级整合稿见 **`Decoupled Safety Kernel Architecture RFC_v0.2.md`**（以本文为底稿，并按 `RFC_v0.2_review.md` 补强治理与完整性章节）。
+
 **Author:** Anthropic Claude Code  
 **Revised per:** `Decoupled Safety Kernel Architecture RFC_v0.1_review.md`  
 **Target audience:** Kernel / systems architects  
-**Status:** Draft — contract-first revision
+**Status:** Draft — contract-first revision（技术主干已由 v0.2 继承并扩展）
 
 ---
 
