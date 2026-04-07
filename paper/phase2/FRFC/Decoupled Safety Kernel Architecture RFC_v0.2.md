@@ -1,9 +1,13 @@
 # RFC: Decoupled Safety Kernel Architecture (v0.2)
 
-**Author:** Anthropic Claude Code  
-**Supersedes:** `Decoupled Safety Kernel Architecture RFC_v0.1.md`（contract-first 修订版）  
-**Incorporates:** `Decoupled Safety Kernel Architecture RFC_v0.2_review.md`（治理层与完整性补强）  
-**Target audience:** 架构委员会、安全评审、内核/系统实现团队  
+**Author:** Anthropic Claude Code
+
+**Supersedes:** `Decoupled Safety Kernel Architecture RFC_v0.1.md`（contract-first 修订版）
+
+**Incorporates:** `Decoupled Safety Kernel Architecture RFC_v0.2_review.md`（治理层与完整性补强）
+
+**Target audience:** 架构委员会、安全评审、内核/系统实现团队
+
 **Status:** Draft — 发布级整合稿
 
 ---
@@ -12,7 +16,7 @@
 
 本 RFC 定义与基础大语言模型（LLM）**解耦**的 **Safety Kernel**：将基础模型视为 Ring-3 **非可信**用户态生成进程，在 Ring-0/1 以**可审计契约**强制执行输入净化、离散时间 DCBF 监测、DSL→自动机策略、多验证器裁决、候选集联合投影及 Graceful Degradation。规范要求每步生成在**有界时间**内完成，默认在冲突、不可行、超时或审计失败时走 **fail-safe**（以 deny/降级为主），并通过 **Audit / Evidence Chain** 绑定 `trace_id` 与规则/系数版本。
 
-**非目标**不在摘要展开，见第 1 节；**威胁模型**见第 2 节；**全局安全不变量**见第 8 节；**故障分类**见第 9 节；**验证与配置**见第 11–13 节。
+**非目标**不在摘要展开，见第 1 节；**威胁模型**见第 2 节；**全局安全不变量**见第 8 节（含 I6 提交顺序）；**故障分类**见第 9 节；**验证与配置**见第 11–13 节。
 
 **关键词：** decoupled safety、control barrier function、runtime policy automaton、verifier ensemble、constraint projection、evidence chain、hard latency budget
 
@@ -145,13 +149,38 @@ flowchart TD
 
 以下 Rust 风格接口为 **规范意图**；实现可拆分 crate，但**字段语义不得删减**（MUST NOT 弱化）。
 
+### 5.0 核心类型最小契约（Normative Type Surface）
+
+下列类型 **不要求** 在本 RFC 中给出完整实现，但实现 MUST 满足最小语义，以便多实现可对齐：
+
+| 类型 | 最小语义（MUST） |
+| ---- | ---------------- |
+| `Token` | 表示模型可见的最小离散输出单位；实现 MAY 使用 token id、BPE 单元或文法符号，但 MUST 可映射回审计可见的文本片段（或等价审计句柄）。 |
+| `LatentState` | **只读代理**状态，**不等同于**完整模型内部状态；MUST 声明来源层、维度与 probe / 编码版本并写入审计绑定。 |
+| `DeterministicAutomaton` | 可增量验证前缀合法性的确定性工件；MUST 支持状态/版本摘要进入审计（如 `automaton_revision`）。 |
+| `Ast` | DSL 解析树；仅经 `lower` 进入 `DeterministicAutomaton`，**不得**作为运行时唯一策略源。 |
+| `VerificationContext` | MUST 至少包含 `trace_id`、`step_index`、`policy_revision`，以及前缀的 token/text 视图（部署定义其一或二者）。 |
+| `CompileError` / `ParseError` / `AutomatonReject` | 可序列化故障类别，供遥测与降级路由；MUST NOT 静默吞没。 |
+| `SystemFault` | Gateway 等子系统不可恢复错误；调用方 MUST 映射为 0 节 fail-safe 或 `SafetyFault`。 |
+| `SafetyFault` | MUST 可区分第 9 节 `GatewayFault` / `MonitorFault` / `PolicyFault` / `VerifierFault` / `ProjectionFault` / `KernelFault`（可组合）。 |
+| `ExecutionContext` | 单次请求/会话的执行句柄；MUST 持有本步前缀、`VerificationContext`、以及 **请求级** `SanitizedPrompt`（见 6 节）。 |
+| `SafetyKernel` | 聚合 `GatewayFilter`、`DCBFEvaluator`、`SafetyDSLCompiler`、`JudgeEnsemble`、`AxiomHiveBoundary`、`GracefulDegradation` 与审计端口；LLM **不得**为其子类型。 |
+| `SafeToken` | 对用户可见的最终输出单元；若为降级产物，MUST 可追溯至 `DegradeAction`（Template / Refuse / Redact 等）。 |
+
 ### 5.1 Gateway
 
 ```rust
+pub enum Severity {
+    Info,
+    Warn,
+    High,
+    Critical,
+}
+
 pub struct Finding {
     pub rule_id: String,
     pub span: std::ops::Range<usize>,
-    pub severity: u8,
+    pub severity: Severity,
 }
 
 pub struct SanitizedPrompt {
@@ -164,6 +193,8 @@ pub trait GatewayFilter {
     fn sanitize_input(&self, raw_input: &[u8]) -> Result<SanitizedPrompt, SystemFault>;
 }
 ```
+
+实现 MUST 将 `Finding.severity == Critical` 映射为**可直接 hard reject** 的路径（拒绝进入后续生成或强制安全模板），且该裁决 MUST 进入审计。
 
 ### 5.2 DCBF
 
@@ -205,8 +236,15 @@ pub trait SafetyDSLCompiler {
 ### 5.4 Judge Ensemble
 
 ```rust
+pub enum Vote {
+    Allow,
+    Revise,
+    Deny,
+    Abstain,
+}
+
 pub struct Verdict {
-    pub vote: bool,
+    pub vote: Vote,
     pub confidence: f32,
     pub explanation: String,
     pub verifier_id: String,
@@ -214,10 +252,12 @@ pub struct Verdict {
 
 pub struct EnsembleReport {
     pub verdicts: Vec<Verdict>,
-    pub tally_pass: u32,
-    pub tally_fail: u32,
+    pub tally_allow: u32,
+    pub tally_revise: u32,
+    pub tally_deny: u32,
+    pub tally_abstain: u32,
     pub conflict: bool,
-    pub final_allow: bool,
+    pub final_action: Vote,
 }
 
 pub trait JudgeEnsemble {
@@ -229,20 +269,27 @@ pub trait JudgeEnsemble {
 }
 ```
 
+`final_action` MUST 由**显式计票策略**（部署注册）导出；`conflict == true` 时 `final_action` MUST 为 `Deny`，除非已审计的 **break-glass** 策略显式放行（见 I4）。实现 MUST 将所用策略标识写入审计。
+
 ### 5.5 Axiom Hive
 
 ```rust
+pub struct CandidateVerdict {
+    pub index: usize,
+    pub ensemble: EnsembleReport,
+}
+
 pub struct ProjectionInput<'a> {
     pub logits: &'a [f32],
     pub topk_indices: &'a [usize],
+    pub candidate_verdicts: &'a [CandidateVerdict],
     pub automata: &'a DeterministicAutomaton,
     pub dcbf: &'a DCBFReport,
-    pub ensemble: &'a EnsembleReport,
     pub deadline: std::time::Instant,
 }
 
 pub struct ProjectionOutput {
-    pub chosen_index: usize,
+    pub chosen_index: Option<usize>,
     pub feasible: bool,
     pub energy: f32,
     pub distance: f32,
@@ -253,6 +300,8 @@ pub trait AxiomHiveBoundary {
     fn enforce_projection(&self, input: ProjectionInput<'_>) -> ProjectionOutput;
 }
 ```
+
+**规范语义（MUST）：** Axiom Hive 的输入候选集 MUST 为：在 `topk_indices` 上**前缀合法**（`validate_prefix` 成功）且该候选的 `EnsembleReport.final_action != Deny` 的条目；`ProjectionInput.candidate_verdicts` MUST **一一对应**上述候选（每项携带其 `index` 与完整 `EnsembleReport`）。若 `feasible == false` 或 `page_fault == true`，`chosen_index` MUST 为 `None`。
 
 ### 5.6 Graceful Degradation
 
@@ -275,18 +324,32 @@ pub trait GracefulDegradation {
 
 每步围绕 **安全候选集上的最小偏移选择**，而非单 token 事后补救。
 
+### 6.0 Gateway 与步级语义
+
+**MUST：** `GatewayFilter::sanitize_input` 在 **请求/会话初始化**阶段执行（每用户请求或等价会话边界至少一次），结果写入 `ExecutionContext` 为 `SanitizedPrompt`。**不得**将伪代码解读为“每个 token 步必须重新完整 sanitize”；若实现选择在步级再次调用，MUST 等价于使用已缓存的 `<SanitizedPrompt>` 且该选择 MUST 可审计。`generate_token_intercept` **只消费**上下文中的 `SanitizedPrompt`，避免与“单步拦截”语义混淆。
+
 ### 6.1 主循环（伪代码）
 
 ```rust
 const HARD_LATENCY_BUDGET: Duration = Duration::from_millis(20);
 const QP_INNER_BUDGET: Duration = Duration::from_millis(5);
 
+/// 请求入口（示意）：MUST 在首 token 步之前完成。
+pub fn init_request_sanitized(
+    ctx: &mut ExecutionContext,
+    kernel: &SafetyKernel,
+) -> Result<(), SystemFault> {
+    let sp = kernel.gateway.sanitize_input(ctx.raw_user_bytes())?;
+    ctx.set_sanitized_prompt(sp);
+    Ok(())
+}
+
 pub async fn generate_token_intercept(
     ctx: &mut ExecutionContext,
     kernel: &SafetyKernel,
 ) -> SafeToken {
     let result = timeout(HARD_LATENCY_BUDGET, async {
-        let sanitized = kernel.gateway.sanitize_input(ctx.raw_user_bytes())?;
+        let _sanitized = ctx.sanitized_prompt().ok_or(SafetyFault::EvidenceMissing)?;
 
         let (latent_t, latent_t1) = ctx.untrusted_llm.peek_latent_trajectory().await;
         let dcbf = kernel.dcbf.check_forward_invariance(&latent_t, &latent_t1, 0.1);
@@ -299,7 +362,7 @@ pub async fn generate_token_intercept(
         let (logits, topk_idx) = ctx.untrusted_llm.topk_logits(&latent_t1, K).await;
 
         let mut legal: Vec<usize> = Vec::new();
-        let mut ensemble_for_projection: Option<EnsembleReport> = None;
+        let mut candidate_verdicts: Vec<CandidateVerdict> = Vec::new();
         for &i in topk_idx {
             let tok = ctx.untrusted_llm.index_to_token(i);
             if kernel
@@ -309,23 +372,26 @@ pub async fn generate_token_intercept(
             {
                 let ens = kernel.judge_ensemble.verify(&tok, &ctx.vctx);
                 kernel.audit.append_step("ensemble", &ens);
-                if ens.final_allow {
+                if ens.final_action != Vote::Deny {
                     legal.push(i);
-                    ensemble_for_projection = Some(ens);
+                    candidate_verdicts.push(CandidateVerdict {
+                        index: i,
+                        ensemble: ens,
+                    });
                 }
             }
         }
 
-        let ensemble_ref = ensemble_for_projection
-            .as_ref()
-            .ok_or(SafetyFault::EvidenceMissing)?;
+        if legal.is_empty() || candidate_verdicts.is_empty() {
+            return Err(SafetyFault::EvidenceMissing);
+        }
 
         let po = kernel.axiom_hive.enforce_projection(ProjectionInput {
             logits: &logits,
             topk_indices: &legal,
+            candidate_verdicts: &candidate_verdicts,
             automata: &kernel.automata,
             dcbf: &dcbf,
-            ensemble: ensemble_ref,
             deadline: Instant::now() + QP_INNER_BUDGET,
         });
 
@@ -333,7 +399,10 @@ pub async fn generate_token_intercept(
             return Err(SafetyFault::UnrecoverablePageFault(po));
         }
 
-        Ok(ctx.untrusted_llm.index_to_token(po.chosen_index))
+        let idx = po
+            .chosen_index
+            .ok_or(SafetyFault::UnrecoverablePageFault(po))?;
+        Ok(ctx.untrusted_llm.index_to_token(idx))
     })
     .await;
 
@@ -348,7 +417,7 @@ pub async fn generate_token_intercept(
 }
 ```
 
-实现 MUST 将 `EnsembleReport` 聚合策略（如按 logit 选最优对应报告、worst-case 合并等）**写入审计**；上文“最后一个合法候选”仅为占位示例。
+每候选的 `EnsembleReport` MUST 完整进入 `candidate_verdicts` 并可供审计回放；**禁止**再以“单一占位报告”代表整集合法候选。
 
 ---
 
@@ -377,7 +446,7 @@ $$
 H(z) = E_{\mathrm{model}}(z) + E_{\mathrm{forbid}}(z)
 $$
 
-$E_{\mathrm{model}}$的版本与系数 MUST 进入审计（见第 10 节）。
+$E_{\mathrm{model}}$的版本与系数 MUST 进入审计（见第 11 节）。
 
 ### 7.4 投影
 
@@ -385,7 +454,7 @@ $$
 z^\star = \arg\min_{z \in C} \; \|z - z_{\mathrm{cand}}\|_2^2 + \lambda \, E_{\mathrm{forbid}}(z)
 $$
 
-`ProjectionOutput` MUST 填充 `feasible`、`energy`、`distance`、`page_fault`。
+`ProjectionOutput` MUST 填充 `feasible`、`energy`、`distance`、`page_fault`、`chosen_index: Option<usize>`；若 `feasible == false` 或 `page_fault == true`，`chosen_index` MUST 为 `None`（与第 5.5 节一致）。
 
 ### 7.5 DCBF
 
@@ -406,10 +475,11 @@ $$
 以下不变量在**单请求、单 token 步**语义下 MUST 成立（除非进入已审计的 Shutdown 路径）：
 
 1. **I1（裁决隔离）** 基础 LLM MUST NOT 直接写入 Safety Kernel 的持久裁决状态（策略版本、自动机、审计存储）；仅能通过**限定 API**（如 logits、latent 代理读）交互。  
-2. **I2（输出必经安全链）** 任何对用户可见的 token/stream MUST 经过 Gateway →（DCBF 按部署启用）→ Policy/Automata → Ensemble →（Axiom Hive 按部署启用）→ 审计记录中的可追溯步骤。  
+2. **I2（输出必经安全链）** 任何对用户可见的 token/stream MUST 经过 Gateway →（DCBF 按部署启用）→ Policy/Automata → Ensemble →（Axiom Hive 按部署启用）→ 审计记录中的可追溯步骤；与 **I6** 的可见性提交顺序一致。  
 3. **I3（DCBF 与前向不变）** 当 `DCBFReport.interrupt == false` 且实现声明启用 DCBF 硬约束时，屏障条件 MUST 在该步上满足；`near_violation` MAY 触发收紧但 MUST NOT 静默跳过审计。  
-4. **I4（冲突默认安全）** `EnsembleReport.conflict == true` 时，`final_allow` MUST 为 `false`，除非部署显式注册**更高危**的“break-glass”策略（该策略本身 MUST 被审计）。  
-5. **I5（有界时间）** 单步拦截 MUST 在 `HARD_LATENCY_BUDGET` 内终止于**输出或降级**；不得无限阻塞等待 LLM。
+4. **I4（冲突默认安全）** `EnsembleReport.conflict == true` 时，`final_action` MUST 为 `Vote::Deny`，除非部署显式注册**更高危**的“break-glass”策略（该策略本身 MUST 被审计）。  
+5. **I5（有界时间）** 单步拦截 MUST 在 `HARD_LATENCY_BUDGET` 内终止于**输出或降级**；不得无限阻塞等待 LLM。  
+6. **I6（可见性提交顺序 / commit ordering）** 任一 token 或流式片段 MUST NOT 对用户可见，直至对应安全裁决及**部署要求的审计记录**已持久提交，或已由部署策略**显式豁免**（豁免本身 MUST 可审计）。Streaming 下“先输出后补审计”在未豁免时 MUST NOT。
 
 ---
 
@@ -421,7 +491,7 @@ $$
 | ----------------- | --------------- | --------------------------------- |
 | `GatewayFault`    | 规范化/编码/边界失败     | `sanitize_input`                  |
 | `MonitorFault`    | DCBF 读代理或评估失败   | `DCBFEvaluator`、探针不可用             |
-| `PolicyFault`     | DSL/自动机/前缀非法    | `parse`/`lower`/`validate_prefix` |
+| `PolicyFault`     | DSL/自动机/前缀非法    | `parse`/`normalize`/`lint`/`lower`/`validate_prefix` |
 | `VerifierFault`   | 单验证器崩溃或超时       | Ensemble 成员                       |
 | `ProjectionFault` | 不可行、QP 失败、超时    | Axiom Hive                        |
 | `KernelFault`     | 审计失败、死锁、内部不变量破坏 | Audit、调度                          |
@@ -432,16 +502,18 @@ $$
 
 ## 10. 延迟预算与调度规则（Latency Budget & Scheduling Rules）
 
-### 10.1 建议分账（可配置，默认安全值由部署提供）
+### 10.1 建议分账与超限动作（可配置，默认安全值由部署提供）
 
-| 阶段                  | 建议上限（ms） | 说明                          |
-| ------------------- | -------- | --------------------------- |
-| Gateway / normalize | 2        | canonical + tags            |
-| DCBF + latent read  | 4        | 含 `DCBFReport`              |
-| top-k + automata    | 5        | 与 K 联动                      |
-| Judge Ensemble      | 4        | 并行取临界路径                     |
-| Axiom Hive（QP）      | 4        | ≤ `QP_INNER_BUDGET`（如 5 ms） |
-| Audit append        | 1        | 失败策略见 0 节表                  |
+| 阶段                  | 建议上限（ms） | 超限/违约时的规范映射（MUST 一致）        |
+| ------------------- | -------- | ----------------------------- |
+| Gateway / normalize | 2        | `GatewayFault` 或 `DeadlineExceeded` → 0 节 fail-safe / deny |
+| DCBF + latent read  | 4        | `MonitorFault` → 降级 FSM          |
+| top-k + automata    | 5        | `PolicyFault` / 前缀拒绝 → deny   |
+| Judge Ensemble      | 4        | `VerifierFault` 或 `conflict` → deny（除非 break-glass） |
+| Axiom Hive（QP）      | 4        | `ProjectionFault` / 超时 → PageFault 路径 |
+| Audit append        | 1        | `KernelFault` → 0 节 fail-safe   |
+
+补充说明：canonical + tags、与 \(K\) 联动、`DCBFReport`、并行 Judge 临界路径、≤ `QP_INNER_BUDGET` 等工程细节仍适用；上表将**预算与违约动作**绑定为可评审契约。
 
 ### 10.2 调度 MUST
 
@@ -460,8 +532,8 @@ $$
 - `policy_revision` / `dsl_hash` / `automaton_revision`  
 - `coeff_revision`（\(\alpha,\lambda,\eta,\epsilon\) 等绑定版本）  
 - `dcbf`：`DCBFReport` 序列化摘要  
-- `ensemble`：`EnsembleReport` 摘要（含 `verdicts` 哈希或裁剪引用）  
-- `projection`：`ProjectionOutput` 摘要  
+- `ensemble`：每候选 `EnsembleReport` 或 `candidate_verdicts` 的摘要（含 `Vote` 计票、`final_action`、计票策略 id、`verdicts` 哈希或裁剪引用）  
+- `projection`：`ProjectionOutput` 摘要（含 `chosen_index: Option<usize>` 与 `feasible`/`page_fault`）  
 - `degrade_action`（若发生）
 
 ### 11.2 MUST
@@ -479,12 +551,18 @@ $$
 - **属性测试**：前缀闭包安全下，非法扩展 MUST 被拒绝。  
 - **回归测试**：固定 `trace_id` 重放，输出与审计一致。  
 - **预算耗尽测试**：人为注入慢路径，MUST 命中 `DeadlineExceeded` 与预期降级。  
-- **降级迁移测试**：`ProjectionFault` → Template → 后续步继续符合 I1–I5。
+- **降级迁移测试**：`ProjectionFault` → Template → 后续步继续符合 I1–I6。
 
 ### 12.2 SHOULD
 
 - 模糊测试 Gateway 规范化与畸形 UTF-8。  
 - 对抗样本集针对 top-k 过滤与冲突策略。
+
+### 12.3 故障注入（MUST 纳入测试计划）
+
+1. **审计写入失败注入**：模拟审计存储不可写；验证 MUST 符合第 0 节 fail-safe（deny / 降级）。  
+2. **验证器崩溃/慢路径**：单成员 panic 或超时；验证 ensemble 是否 `conflict` → `Deny`（及遥测）。  
+3. **热更新竞态**：inflight 请求期间切换自动机；验证 double-buffer / revision 钉扎不破坏 `trace_id` 与审计一致性。
 
 ---
 
@@ -492,7 +570,7 @@ $$
 
 ### 13.1 DSL / 策略热更新 MUST
 
-- 新 DSL MUST 完整经过 `parse` → **lint/normalize（建议）** → `lower`；**任一步失败则不得**替换在线 `DeterministicAutomaton`。  
+- 新 DSL MUST 完整经过 `parse` → **`normalize` → `lint` → `lower`**；**任一步失败则不得**替换在线 `DeterministicAutomaton`。`normalize` 与 `lint` 为规范管道组成部分，**不得**降级为可选步骤。  
 - 切换原子：建议 **double-buffer**（激活指针仅在成功编译后翻转）；旧版本保留至 inflight 请求结束或 TTL。  
 - `policy_revision`、`dsl_hash`、`automaton_revision` MUST 写入审计。
 
@@ -509,33 +587,22 @@ $$
 
 ## 14. 向后兼容（Backward Compatibility）
 
-- **v0.2** 相对 **v0.1（修订版）**：新增摘要、非目标、威胁模型、不变量、故障分类、审计字段、测试与热更新章节；**接口语义与 v0.1 修订版一致**，未删除既有字段。  
-- 后续 **v0.3** 若删减 `ProjectionInput` 字段或改变默认 deny 语义，MUST 提供迁移说明与兼容标志。  
+- **v0.2** 相对 **v0.1（修订版）**：在 v0.1 主干之上增加治理章节，并对照 `RFC_v0.2_review.md` **收紧契约**：`Finding.severity` 规范为 `Severity` enum；`Verdict.vote` 为 `Vote` enum；`EnsembleReport` 使用 `tally_*` 与 `final_action`；`ProjectionInput` 使用 `candidate_verdicts` 替代单例 `ensemble`；`ProjectionOutput.chosen_index` 为 `Option<usize>`；主循环明确请求级 `sanitize_input` 与 per-candidate 裁决。实现若自 v0.1 移植，MUST 按上表做字段与语义迁移。  
+- 后续 **v0.3** 若再删减 `ProjectionInput` 字段或改变默认 deny 语义，MUST 提供迁移说明与兼容标志。  
 - 建议：对外暴露 `kernel_abi_version` 与 `policy_schema_version`。
 
 ---
 
-## 15. 与前期文档的关系
+## 15. 文档谱系（Document Lineage）
 
-| 文档                         | 关系                           |
-| -------------------------- | ---------------------------- |
-| 最早 v0.1 概念稿（`RFC_v0,1.md`） | 已由 contract-first v0.1 修订版取代 |
-| `RFC_v0.1.md`（修订版）         | 本 v0.2 **继承其全部技术主干**         |
-| `RFC_v0.2_review.md`       | 本 v0.2 **吸收其治理层与目录补强**       |
-
-### 15.1 v0.2 相对 v0.1（修订版）新增摘要
-
-- Abstract、RFC 2119、Non-Goals、Threat Model  
-- Safety Invariants、Fault Taxonomy  
-- Latency 调度 MUST、Audit 最小字段  
-- Testing & Validation、Hot Reload / Versioning、Backward Compatibility  
+本文件为 **SSOT**。`RFC_v0.1.md`（contract-first 修订版）为技术主干来源；`RFC_v0.2_review.md` 的 P0–P2 修订已并入正文。最早概念稿 `RFC_v0,1.md`（逗号文件名）已由 v0.1 修订版取代。详细变更日志如需可置于仓库 `CHANGELOG` 或附录，**不**在正文展开。
 
 ---
 
 ## 16. 开放性工作
 
 - `LatentState` 与 probe 的对抗鲁棒性与因果性评估。  
-- \(K,$\alpha$,$\lambda$,$\eta$\) 自适应与在线调参的安全边界。  
+- \(K\)、\(\alpha\)、\(\lambda\)、\(\eta\) 自适应与在线调参的安全边界。  
 - 硬件 TEE / 内核调度器协同。  
 - Formal methods 对自动机与屏障条件的机器可查证明（可选）。
 
@@ -544,6 +611,8 @@ $$
 ## 结论
 
 Decoupled Safety Kernel v0.2 在 v0.1 **契约化主干**之上，补齐**可评审 RFC**所需的治理与验证章节：非目标与威胁模型界定范围，不变量与故障分类统一实现与运维语言，审计与预算规则使 fail-safe **可执行**，测试与热更新条款使规范**可落地**。实现应 **以本文件为单一权威**（SSOT）进行对齐与评审。
+
+**优先规则：** 若实现说明、代码注释或 review 备忘与本 RFC 冲突，**以本 RFC 为准**，除非已被**后续已批准的修订版本**明示取代。
 
 ---
 
