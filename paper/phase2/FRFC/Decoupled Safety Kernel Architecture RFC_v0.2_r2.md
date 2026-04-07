@@ -1,16 +1,22 @@
-# RFC: Decoupled Safety Kernel Architecture (v0.2)
+# RFC: Decoupled Safety Kernel Architecture (v0.2-r2)
 
 **Author:** Anthropic Claude Code
 
-**Supersedes:** `Decoupled Safety Kernel Architecture RFC_v0.1.md`（contract-first 修订版）
+**Supersedes:** `Decoupled Safety Kernel Architecture RFC_v0.2.md`（v0.2 正文；本文件为 **r2 收口修订**，冻结前歧义压平）
 
-**Incorporates:** `Decoupled Safety Kernel Architecture RFC_v0.2_review.md`（治理层与完整性补强）
+**Prior art:** `Decoupled Safety Kernel Architecture RFC_v0.1.md`（contract-first 修订版）
+
+**Incorporates:** `Decoupled Safety Kernel Architecture RFC_v0.2_review.md`（首轮治理补强）; `Decoupled Safety Kernel Architecture RFC_v0.2_r2_review.md`（渲染/类型闭合/fault 粒度/索引语义等）
 
 **Target audience:** 架构委员会、安全评审、内核/系统实现团队
 
-**Status:** Draft — 发布级整合稿
+**Status:** Draft — 规范冻结前收口稿
 
-**Successor（收口修订）:** `Decoupled Safety Kernel Architecture RFC_v0.2_r2.md`（依 `RFC_v0.2_r2_review.md` 进一步压平歧义；评审/实现优先对齐 r2。）
+---
+
+## 文档表示约定（渲染）
+
+全文 **Mermaid** 使用 ` ```mermaid ` 围栏；**Rust/伪代码**使用 ` ```rust ` 围栏；**块级数学**使用 `$$ ... $$`。复制或抓取时须保留围栏，以保证渲染与 diff 可审计。
 
 ---
 
@@ -49,6 +55,7 @@
 
 | 条件                 | 默认动作                               |
 | ------------------ | ---------------------------------- |
+| `Finding.severity == Critical`（Gateway） | **Hard Reject**（拒绝进入后续生成或直接安全模板）；与第 5.1 节一致 |
 | Verifier 冲突 / 证据不足 | **Deny**（拒绝或安全模板）                  |
 | 投影不可行 / QP 超时      | **PageFault 路径** → 降级 FSM          |
 | 步级总预算耗尽            | **DeadlineExceeded** → 降级 FSM      |
@@ -161,11 +168,11 @@ flowchart TD
 | `LatentState` | **只读代理**状态，**不等同于**完整模型内部状态；MUST 声明来源层、维度与 probe / 编码版本并写入审计绑定。 |
 | `DeterministicAutomaton` | 可增量验证前缀合法性的确定性工件；MUST 支持状态/版本摘要进入审计（如 `automaton_revision`）。 |
 | `Ast` | DSL 解析树；仅经 `lower` 进入 `DeterministicAutomaton`，**不得**作为运行时唯一策略源。 |
-| `VerificationContext` | MUST 至少包含 `trace_id`、`step_index`、`policy_revision`，以及前缀的 token/text 视图（部署定义其一或二者）。 |
+| `VerificationContext` | MUST 至少包含 `trace_id`、`step_index`、`policy_revision`，以及前缀的 token/text 视图（部署定义其一或二者）。若**同时**提供 token 与 text 视图，二者 MUST 可相互映射并在审计中与同一 `step_index` 绑定；实现 **MUST NOT** 允许 Verifier 基于与自动机所用前缀视图**不一致**的视图作出最终放行决定。 |
 | `CompileError` / `ParseError` / `AutomatonReject` | 可序列化故障类别，供遥测与降级路由；MUST NOT 静默吞没。 |
 | `SystemFault` | Gateway 等子系统不可恢复错误；调用方 MUST 映射为 0 节 fail-safe 或 `SafetyFault`。 |
-| `SafetyFault` | MUST 可区分第 9 节 `GatewayFault` / `MonitorFault` / `PolicyFault` / `VerifierFault` / `ProjectionFault` / `KernelFault`（可组合）。 |
-| `ExecutionContext` | 单次请求/会话的执行句柄；MUST 持有本步前缀、`VerificationContext`、以及 **请求级** `SanitizedPrompt`（见 6 节）。 |
+| `SafetyFault` | MUST 可区分第 9 节 `GatewayFault` / `MonitorFault` / `PolicyFault` / `VerifierFault` / `ProjectionFault` / `KernelFault`（可组合），并 MUST 区分第 9.1 节 `MissingSanitizedPrompt` 与 `EmptySafeCandidateSet`（**不得**混用为单一“证据缺失”）。 |
+| `ExecutionContext` | 单次请求/会话的执行句柄；MUST 持有本步前缀、`VerificationContext`、**请求级** `SanitizedPrompt`（见 6 节）、**请求级 monotonic deadline**（或等价的剩余步级预算状态）、以及当前审计/提交句柄（与 I6 对齐）。上述字段生命周期 MUST 覆盖整请求。 |
 | `SafetyKernel` | 聚合 `GatewayFilter`、`DCBFEvaluator`、`SafetyDSLCompiler`、`JudgeEnsemble`、`AxiomHiveBoundary`、`GracefulDegradation` 与审计端口；LLM **不得**为其子类型。 |
 | `SafeToken` | 对用户可见的最终输出单元；若为降级产物，MUST 可追溯至 `DegradeAction`（Template / Refuse / Redact 等）。 |
 
@@ -305,6 +312,8 @@ pub trait AxiomHiveBoundary {
 
 **规范语义（MUST）：** Axiom Hive 的输入候选集 MUST 为：在 `topk_indices` 上**前缀合法**（`validate_prefix` 成功）且该候选的 `EnsembleReport.final_action != Deny` 的条目；`ProjectionInput.candidate_verdicts` MUST **一一对应**上述候选（每项携带其 `index` 与完整 `EnsembleReport`）。若 `feasible == false` 或 `page_fault == true`，`chosen_index` MUST 为 `None`。
 
+**索引匹配（MUST，消除 zip 歧义）：** `candidate_verdicts` 的条目顺序 MAY 与 `topk_indices` 不同，但每项 **MUST** 携带其自身的 `index`；`AxiomHiveBoundary::enforce_projection` **MUST** 按 **index 身份**解析 logits 与裁决，**禁止**假定 `topk_indices` 与 `candidate_verdicts` 按下标位置 zip 一一对应。确定性实现 **SHOULD** 保持与 `topk_indices` 相同的迭代顺序；若顺序不同，**仍 MUST** 仅依赖 `index` 匹配。
+
 ### 5.6 Graceful Degradation
 
 ```rust
@@ -332,6 +341,8 @@ pub trait GracefulDegradation {
 
 ### 6.1 主循环（伪代码）
 
+**break-glass（MUST）：** 普通路径将 `Vote::Deny` 视为候选上的**终止**裁决。任何 break-glass 覆盖 MUST 在 `EnsembleReport.final_action` 产出**之前**解析完成，且覆盖事件 MUST 已写入审计；**禁止**在投影阶段对 `Deny` 再“临时翻案”。
+
 ```rust
 const HARD_LATENCY_BUDGET: Duration = Duration::from_millis(20);
 const QP_INNER_BUDGET: Duration = Duration::from_millis(5);
@@ -351,7 +362,9 @@ pub async fn generate_token_intercept(
     kernel: &SafetyKernel,
 ) -> SafeToken {
     let result = timeout(HARD_LATENCY_BUDGET, async {
-        let _sanitized = ctx.sanitized_prompt().ok_or(SafetyFault::EvidenceMissing)?;
+        let _sanitized = ctx
+            .sanitized_prompt()
+            .ok_or(SafetyFault::MissingSanitizedPrompt)?;
 
         let (latent_t, latent_t1) = ctx.untrusted_llm.peek_latent_trajectory().await;
         let dcbf = kernel.dcbf.check_forward_invariance(&latent_t, &latent_t1, 0.1);
@@ -385,7 +398,7 @@ pub async fn generate_token_intercept(
         }
 
         if legal.is_empty() || candidate_verdicts.is_empty() {
-            return Err(SafetyFault::EvidenceMissing);
+            return Err(SafetyFault::EmptySafeCandidateSet);
         }
 
         let po = kernel.axiom_hive.enforce_projection(ProjectionInput {
@@ -421,26 +434,30 @@ pub async fn generate_token_intercept(
 
 每候选的 `EnsembleReport` MUST 完整进入 `candidate_verdicts` 并可供审计回放；**禁止**再以“单一占位报告”代表整集合法候选。
 
+**Fault 语义：** `MissingSanitizedPrompt` 表示请求初始化契约被破坏；`EmptySafeCandidateSet` 表示当前步不存在前缀合法且 non-deny 的候选集（见第 9.1 节）。
+
 ---
 
 ## 7. 数学映射（文本可审计）
 
 ### 7.1 记号
 
-- $z \in \mathbb{R}^d$：潜空间**代理**向量；**不等同于**完整模型状态。  
-- $C \subseteq \mathbb{R}^d$：潜空间可行域（若使用）；token 级合法性由**有限自动机**单独维护。
+- 令 \(z \in \mathbb{R}^d\) 为潜空间**代理**向量；它 **不等同于**完整模型内部状态。  
+- 令 \(C \subseteq \mathbb{R}^d\) 为潜空间可行域（若部署启用潜空间侧约束/投影）。  
+- 令 \(z_{\mathrm{cand}}\) 表示由当前候选集与对数概率（或等价工程表示）导出的**候选点**；具体构造由实现定义，其版本与绑定 MUST 可审计。  
+- **Token 级合法性**由有限自动机单独维护；**不得**仅凭潜空间可行域 \(C\) 声称覆盖全部语法约束。
 
 ### 7.2 禁止区能量
 
 $$
 E_{\mathrm{forbid}}(z) =
 \begin{cases}
-0 & z \in C \\
-\eta \cdot \phi\bigl(\mathrm{dist}(z,\partial C)\bigr) & z \notin C
+0, & z \in C \\
+\eta \cdot \phi\bigl(\mathrm{dist}(z,\partial C)\bigr), & z \notin C
 \end{cases}
 $$
 
-$\eta$为大惩罚；$\phi$可为二次或 reciprocal wall；实现 MUST 配置 **residual 阈值**与**时间上限**。
+$\eta$ 为大惩罚；$\phi$ 可为二次或 reciprocal wall；实现 MUST 配置 **residual 阈值**与**时间上限**。
 
 ### 7.3 总能量（工程语义）
 
@@ -448,7 +465,7 @@ $$
 H(z) = E_{\mathrm{model}}(z) + E_{\mathrm{forbid}}(z)
 $$
 
-$E_{\mathrm{model}}$的版本与系数 MUST 进入审计（见第 11 节）。
+其中 \(E_{\mathrm{model}}\) 的版本、系数与实现标识 MUST 进入审计（见第 11 节）。
 
 ### 7.4 投影
 
@@ -464,7 +481,11 @@ $$
 h(x_{t+1}) \ge (1-\alpha)\, h(x_t), \quad \alpha \in (0,1]
 $$
 
-`DCBFReport.margin` 可实现为 $h(x_{t+1}) - (1-\alpha)h(x_t)$。
+因此可定义屏障裕度（与 `DCBFReport.margin` 对齐的工程实现）：
+
+$$
+\mathrm{margin} = h(x_{t+1}) - (1-\alpha)\, h(x_t)
+$$
 
 ### 7.6 PageFault 触发（任一）
 
@@ -500,6 +521,15 @@ $$
 
 `SafetyFault` 可组合上述类型；降级 FSM MUST 能区分 **可恢复**（模板/重试）与 **不可恢复**（Shutdown）。
 
+### 9.1 细粒度变体（与主循环对齐）
+
+下列变体 MUST 与遥测/降级路由区分，**不得**混用单一“证据缺失”桶：
+
+| 变体 | 含义 | 建议归类 |
+| ---- | ---- | -------- |
+| `MissingSanitizedPrompt` | 请求初始化契约被破坏：首 token 步前未完成 `sanitize_input` 或未注入 `SanitizedPrompt`。 | `KernelFault`（或部署定义的 `ContextFault`） |
+| `EmptySafeCandidateSet` | 当前步不存在前缀合法且 `final_action != Deny` 的候选。 | `PolicyFault` 与/或投影前置条件（实现 MAY 组合 `ProjectionFault` 语义） |
+
 ---
 
 ## 10. 延迟预算与调度规则（Latency Budget & Scheduling Rules）
@@ -522,6 +552,8 @@ $$
 - 子预算之和 MUST NOT 超过 `HARD_LATENCY_BUDGET`（除非显式 **under-provision** 模式已注册且审计）。  
 - 任一子阶段超时 MUST 映射为 `DeadlineExceeded` 并进入降级。  
 - **建议**：为每层保留 **monotonic deadline**（子截止时间递减），避免“每层都差一点”整体爆炸。
+
+**under-provision mode（定义）：** 指部署**明确接受**“安全内核总预算或子切片**低于**本文推荐值”的受限运行模式。启用该模式时 MUST 记录：启用原因、有效时间窗口、责任人、风险等级，并产生**审计事件**；不同团队 **MUST NOT** 各自隐式定义“under-provision”。
 
 ---
 
@@ -560,6 +592,18 @@ $$
 - 模糊测试 Gateway 规范化与畸形 UTF-8。  
 - 对抗样本集针对 top-k 过滤与冲突策略。
 
+### 12.2.1 Golden traces（SHOULD）
+
+实现 SHOULD 维护一组 **golden traces**（固定输入 + 期望审计摘要/关键字段），覆盖至少：
+
+- 正常允许路径；  
+- `conflict` → `Deny` 路径；  
+- DCBF `near_violation` / `interrupt` 路径；  
+- `ProjectionFault` → 降级路径；  
+- 审计失败 → 第 0 节 fail-safe 路径。
+
+与第 12.1 节「固定 `trace_id` 重放」互补，作为回归基线。
+
 ### 12.3 故障注入（MUST 纳入测试计划）
 
 1. **审计写入失败注入**：模拟审计存储不可写；验证 MUST 符合第 0 节 fail-safe（deny / 降级）。  
@@ -573,7 +617,7 @@ $$
 ### 13.1 DSL / 策略热更新 MUST
 
 - 新 DSL MUST 完整经过 `parse` → **`normalize` → `lint` → `lower`**；**任一步失败则不得**替换在线 `DeterministicAutomaton`。`normalize` 与 `lint` 为规范管道组成部分，**不得**降级为可选步骤。  
-- 切换原子：建议 **double-buffer**（激活指针仅在成功编译后翻转）；旧版本保留至 inflight 请求结束或 TTL。  
+- 切换原子：建议 **double-buffer**（激活指针仅在成功编译后翻转）；旧版本保留至 inflight 请求结束或 TTL。若采用 double-buffer，**inflight 请求 MUST 钉扎**在**请求初始化时观测到的** `policy_revision`（及关联自动机身份），除非部署定义了**已审计**的覆盖机制。  
 - `policy_revision`、`dsl_hash`、`automaton_revision` MUST 写入审计。
 
 ### 13.2 配置项 SHOULD 可运行时调整（带默认安全值）
@@ -589,7 +633,8 @@ $$
 
 ## 14. 向后兼容（Backward Compatibility）
 
-- **v0.2** 相对 **v0.1（修订版）**：在 v0.1 主干之上增加治理章节，并对照 `RFC_v0.2_review.md` **收紧契约**：`Finding.severity` 规范为 `Severity` enum；`Verdict.vote` 为 `Vote` enum；`EnsembleReport` 使用 `tally_*` 与 `final_action`；`ProjectionInput` 使用 `candidate_verdicts` 替代单例 `ensemble`；`ProjectionOutput.chosen_index` 为 `Option<usize>`；主循环明确请求级 `sanitize_input` 与 per-candidate 裁决。实现若自 v0.1 移植，MUST 按上表做字段与语义迁移。  
+- **v0.2-r2** 相对 **`RFC_v0.2.md`**：在 v0.2 正文之上按 `RFC_v0.2_r2_review.md` 收口：**文档表示约定**；`ExecutionContext` / `VerificationContext` 最小契约扩展；`SafetyFault::MissingSanitizedPrompt` 与 `EmptySafeCandidateSet` 拆分；`candidate_verdicts` **按 index 匹配**语义；第 0 节 **Critical Finding → Hard Reject**；第 7 节记号与 **margin** 显式公式；**under-provision** 定义；**golden traces**；double-buffer **policy_revision 钉扎**；**break-glass** 与主循环对齐说明。  
+- **v0.2** 相对 **v0.1（修订版）** 的差分仍适用（见 `RFC_v0.2.md` / `RFC_v0.2_review.md`）。  
 - 后续 **v0.3** 若再删减 `ProjectionInput` 字段或改变默认 deny 语义，MUST 提供迁移说明与兼容标志。  
 - 建议：对外暴露 `kernel_abi_version` 与 `policy_schema_version`。
 
@@ -597,7 +642,7 @@ $$
 
 ## 15. 文档谱系（Document Lineage）
 
-本文件为 **SSOT**。`RFC_v0.1.md`（contract-first 修订版）为技术主干来源；`RFC_v0.2_review.md` 的 P0–P2 修订已并入正文。最早概念稿 `RFC_v0,1.md`（逗号文件名）已由 v0.1 修订版取代。详细变更日志如需可置于仓库 `CHANGELOG` 或附录，**不**在正文展开。
+**本文件（v0.2-r2）** 为实现与评审的 **SSOT**。谱系：`RFC_v0.1.md` → `RFC_v0.2.md` → **本文件**；`RFC_v0.2_r2_review.md` 为本轮收口依据。最早概念稿 `RFC_v0,1.md` 已由 v0.1 修订版取代。详细变更日志可置于仓库 `CHANGELOG` 或附录。
 
 ---
 
@@ -610,9 +655,22 @@ $$
 
 ---
 
+## 17. 实现者注意事项（非规范性）
+
+首轮实现建议优先保证：
+
+1. fail-safe 默认动作与第 0 节表格一致（含 **Critical → Hard Reject**）；  
+2. 审计最小字段（第 11 节）与 I6 提交顺序；  
+3. per-candidate `EnsembleReport` 与投影输入按 **index** 对齐；  
+4. 预算与超时路径可测（含 `DeadlineExceeded`、`EmptySafeCandidateSet`）。
+
+本节 **不改变**上文 MUST/SHOULD 的规范性，仅便于工程 kickoff。
+
+---
+
 ## 结论
 
-Decoupled Safety Kernel v0.2 在 v0.1 **契约化主干**之上，补齐**可评审 RFC**所需的治理与验证章节：非目标与威胁模型界定范围，不变量与故障分类统一实现与运维语言，审计与预算规则使 fail-safe **可执行**，测试与热更新条款使规范**可落地**。实现应 **以本文件为单一权威**（SSOT）进行对齐与评审。
+Decoupled Safety Kernel **v0.2-r2** 在 v0.2 **正文**之上完成冻结前收口：多实现可对齐的类型闭合、fault 粒度、候选–裁决索引语义与数学/渲染可审计性。实现应 **以本文件（v0.2-r2）为单一权威**（SSOT）进行对齐与评审。
 
 **优先规则：** 若实现说明、代码注释或 review 备忘与本 RFC 冲突，**以本 RFC 为准**，除非已被**后续已批准的修订版本**明示取代。
 
